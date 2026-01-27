@@ -144,6 +144,16 @@
             border-radius: 5px;
             font-weight: bold;
             font-size: 0.9em;
+            transition: background 0.3s;
+        }
+        
+        .notice-number a {
+            color: white;
+            text-decoration: none;
+        }
+        
+        .notice-number:hover {
+            background: #5568d3;
         }
         
         .notice-title {
@@ -151,6 +161,17 @@
             font-size: 1.1em;
             color: #2c3e50;
             font-weight: 600;
+        }
+        
+        .notice-title a {
+            color: #2c3e50;
+            text-decoration: none;
+            transition: color 0.3s;
+        }
+        
+        .notice-title a:hover {
+            color: #667eea;
+            text-decoration: underline;
         }
         
         .notice-info {
@@ -304,8 +325,24 @@
                     {% for notice in notices %}
                     <div class="notice-card {% if notice.implemented %}implemented{% endif %}">
                         <div class="notice-header">
-                            <div class="notice-number">{{ notice.notice_number }}</div>
-                            <div class="notice-title">{{ notice.title }}</div>
+                            <div class="notice-number">
+                                {% if notice.url %}
+                                <a href="{{ notice.url }}" target="_blank" title="Klicka för att se fullständig beskrivning">
+                                    {{ notice.notice_number }}
+                                </a>
+                                {% else %}
+                                {{ notice.notice_number }}
+                                {% endif %}
+                            </div>
+                            <div class="notice-title">
+                                {% if notice.url %}
+                                <a href="{{ notice.url }}" target="_blank" title="Klicka för att se fullständig beskrivning">
+                                    {{ notice.title }}
+                                </a>
+                                {% else %}
+                                {{ notice.title }}
+                                {% endif %}
+                            </div>
                         </div>
                         
                         <div class="notice-info">
