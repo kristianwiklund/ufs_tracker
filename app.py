@@ -58,12 +58,22 @@ def init_db():
         CREATE TABLE IF NOT EXISTS implementation_status (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             notice_id INTEGER,
+            chart_identifier TEXT,
             implemented BOOLEAN DEFAULT 0,
             implemented_date TEXT,
             notes TEXT,
-            FOREIGN KEY (notice_id) REFERENCES notices(id)
+            FOREIGN KEY (notice_id) REFERENCES notices(id),
+            UNIQUE(notice_id, chart_identifier)
         )
     ''')
+    
+    # Migration: Add chart_identifier column if it doesn't exist
+    try:
+        c.execute("ALTER TABLE implementation_status ADD COLUMN chart_identifier TEXT")
+        conn.commit()
+    except sqlite3.OperationalError:
+        # Column already exists
+        pass
     
     c.execute('''
         CREATE TABLE IF NOT EXISTS search_history (
@@ -451,8 +461,17 @@ def save_notices_to_db(notices):
                     notice['notice_number'],
                     existing['id']
                 ))
+                
+                # Create implementation status entry for this chart if it doesn't exist
+                chart_identifier = notice.get('batsportkort') or notice.get('sjokort_nummer') or 'unknown'
+                c.execute('''
+                    INSERT OR IGNORE INTO implementation_status 
+                    (notice_id, chart_identifier, implemented)
+                    VALUES (?, ?, 0)
+                ''', (existing['id'], chart_identifier))
+                
                 updated_count += 1
-                debug_print(f"  ✓ Updated")
+                debug_print(f"  ✓ Updated (chart={chart_identifier})")
             else:
                 debug_print(f"  New notice, inserting...")
                 # Insert new notice
@@ -475,14 +494,21 @@ def save_notices_to_db(notices):
                 ))
                 
                 if c.rowcount > 0:
-                    # Create implementation status entry for new notice
+                    # Create implementation status entry for this notice-chart combination
                     notice_id = c.lastrowid
+                    
+                    # Determine the chart identifier (what chart was searched for)
+                    chart_identifier = notice.get('batsportkort') or notice.get('sjokort_nummer') or 'unknown'
+                    
+                    # Insert or ignore if already exists
                     c.execute('''
-                        INSERT INTO implementation_status (notice_id, implemented)
-                        VALUES (?, 0)
-                    ''', (notice_id,))
+                        INSERT OR IGNORE INTO implementation_status 
+                        (notice_id, chart_identifier, implemented)
+                        VALUES (?, ?, 0)
+                    ''', (notice_id, chart_identifier))
+                    
                     saved_count += 1
-                    debug_print(f"  ✓ Inserted (id={notice_id})")
+                    debug_print(f"  ✓ Inserted (id={notice_id}, chart={chart_identifier})")
                 else:
                     skipped_count += 1
                     debug_print(f"  ✗ Insert returned 0 rows affected")
@@ -547,7 +573,7 @@ def search():
 
 @app.route('/notices')
 def list_notices():
-    """List all notices with implementation status"""
+    """List all notices with implementation status for a specific chart"""
     conn = get_db()
     c = conn.cursor()
     
@@ -556,28 +582,35 @@ def list_notices():
     batsportkort = request.args.get('batsportkort', '')
     show_implemented = request.args.get('show_implemented', '1')
     
-    query = '''
-        SELECT n.id, n.notice_number, n.title, n.affected_charts, n.sjokort_nummer, n.batsportkort,
-               n.published_date, n.content, n.url, n.scraped_date,
-               i.implemented, i.implemented_date, i.notes
-        FROM notices n
-        LEFT JOIN implementation_status i ON n.id = i.notice_id
-        WHERE 1=1
-    '''
-    params = []
+    # Determine the chart identifier
+    chart_identifier = batsportkort or sjokort
     
-    if sjokort:
-        query += ' AND n.sjokort_nummer = ?'
-        params.append(sjokort)
-    
-    if batsportkort:
-        query += ' AND n.batsportkort = ?'
-        params.append(batsportkort)
-    
-    if show_implemented == '0':
-        query += ' AND (i.implemented = 0 OR i.implemented IS NULL)'
-    
-    query += ' ORDER BY n.published_date DESC'
+    if not chart_identifier:
+        # If no chart specified, show all notices without filtering
+        query = '''
+            SELECT DISTINCT n.id, n.notice_number, n.title, n.affected_charts, n.sjokort_nummer, n.batsportkort,
+                   n.published_date, n.content, n.url, n.scraped_date,
+                   NULL as implemented, NULL as implemented_date, NULL as notes
+            FROM notices n
+            ORDER BY n.published_date DESC
+        '''
+        params = []
+    else:
+        # Show notices for the specific chart with their implementation status
+        query = '''
+            SELECT n.id, n.notice_number, n.title, n.affected_charts, n.sjokort_nummer, n.batsportkort,
+                   n.published_date, n.content, n.url, n.scraped_date,
+                   i.implemented, i.implemented_date, i.notes, i.chart_identifier
+            FROM notices n
+            INNER JOIN implementation_status i ON n.id = i.notice_id
+            WHERE i.chart_identifier = ?
+        '''
+        params = [chart_identifier]
+        
+        if show_implemented == '0':
+            query += ' AND (i.implemented = 0 OR i.implemented IS NULL)'
+        
+        query += ' ORDER BY n.published_date DESC'
     
     c.execute(query, params)
     notices = c.fetchall()
@@ -590,31 +623,36 @@ def list_notices():
 
 @app.route('/update_status/<int:notice_id>', methods=['POST'])
 def update_status(notice_id):
-    """Update implementation status of a notice"""
+    """Update implementation status of a notice for a specific chart"""
     data = request.get_json()
     implemented = data.get('implemented', False)
     notes = data.get('notes', '')
+    chart_identifier = data.get('chart_identifier', '')
     
     conn = get_db()
     c = conn.cursor()
     
     implemented_date = datetime.now().isoformat() if implemented else None
     
-    # Check if status entry exists
-    c.execute('SELECT id FROM implementation_status WHERE notice_id = ?', (notice_id,))
+    # Check if status entry exists for this notice-chart combination
+    c.execute('''
+        SELECT id FROM implementation_status 
+        WHERE notice_id = ? AND chart_identifier = ?
+    ''', (notice_id, chart_identifier))
     status = c.fetchone()
     
     if status:
         c.execute('''
             UPDATE implementation_status 
             SET implemented = ?, implemented_date = ?, notes = ?
-            WHERE notice_id = ?
-        ''', (implemented, implemented_date, notes, notice_id))
+            WHERE notice_id = ? AND chart_identifier = ?
+        ''', (implemented, implemented_date, notes, notice_id, chart_identifier))
     else:
         c.execute('''
-            INSERT INTO implementation_status (notice_id, implemented, implemented_date, notes)
-            VALUES (?, ?, ?, ?)
-        ''', (notice_id, implemented, implemented_date, notes))
+            INSERT INTO implementation_status 
+            (notice_id, chart_identifier, implemented, implemented_date, notes)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (notice_id, chart_identifier, implemented, implemented_date, notes))
     
     conn.commit()
     conn.close()
@@ -627,33 +665,29 @@ def statistics():
     conn = get_db()
     c = conn.cursor()
     
-    # Total notices
-    c.execute('SELECT COUNT(*) FROM notices')
+    # Total notices tracked (total implementation_status entries)
+    c.execute('SELECT COUNT(*) FROM implementation_status')
+    total_trackings = c.fetchone()[0]
+    
+    # Total unique notices
+    c.execute('SELECT COUNT(DISTINCT notice_id) FROM implementation_status')
     total_notices = c.fetchone()[0]
     
-    # Implemented notices
+    # Implemented notice-chart combinations
     c.execute('SELECT COUNT(*) FROM implementation_status WHERE implemented = 1')
     implemented = c.fetchone()[0]
     
-    # By sjökort
+    # Statistics by chart - showing notices and implementation status
     c.execute('''
-        SELECT sjokort_nummer, COUNT(*) as count
-        FROM notices
-        WHERE sjokort_nummer != ''
-        GROUP BY sjokort_nummer
-        ORDER BY count DESC
+        SELECT 
+            i.chart_identifier,
+            COUNT(DISTINCT i.notice_id) as total_notices,
+            SUM(CASE WHEN i.implemented = 1 THEN 1 ELSE 0 END) as implemented_notices
+        FROM implementation_status i
+        GROUP BY i.chart_identifier
+        ORDER BY total_notices DESC
     ''')
-    by_sjokort = c.fetchall()
-    
-    # By båtsportkort
-    c.execute('''
-        SELECT batsportkort, COUNT(*) as count
-        FROM notices
-        WHERE batsportkort != ''
-        GROUP BY batsportkort
-        ORDER BY count DESC
-    ''')
-    by_batsportkort = c.fetchall()
+    by_chart = c.fetchall()
     
     # Recent searches
     c.execute('''
@@ -668,9 +702,9 @@ def statistics():
     
     return render_template('statistics.html',
                          total_notices=total_notices,
+                         total_trackings=total_trackings,
                          implemented=implemented,
-                         by_sjokort=by_sjokort,
-                         by_batsportkort=by_batsportkort,
+                         by_chart=by_chart,
                          recent_searches=recent_searches)
 
 if __name__ == '__main__':

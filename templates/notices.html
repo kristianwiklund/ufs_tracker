@@ -427,6 +427,10 @@
     </div>
     
     <script>
+        // Get the current chart identifier from the URL parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const chartIdentifier = urlParams.get('batsportkort') || urlParams.get('sjokort') || '';
+        
         async function updateStatus(noticeId, implemented) {
             const notesInput = document.getElementById('notes_' + noticeId);
             const notes = notesInput ? notesInput.value : '';
@@ -439,7 +443,8 @@
                     },
                     body: JSON.stringify({
                         implemented: implemented,
-                        notes: notes
+                        notes: notes,
+                        chart_identifier: chartIdentifier
                     })
                 });
                 
@@ -467,7 +472,8 @@
                     },
                     body: JSON.stringify({
                         implemented: implemented,
-                        notes: notes
+                        notes: notes,
+                        chart_identifier: chartIdentifier
                     })
                 });
             } catch (error) {
