@@ -8,6 +8,7 @@ from Swedish Maritime Administration
 import sqlite3
 import requests
 import re
+import argparse
 from flask import Flask, render_template, request, jsonify, redirect, url_for
 from datetime import datetime
 from bs4 import BeautifulSoup
@@ -16,6 +17,14 @@ import os
 
 app = Flask(__name__)
 app.config['DATABASE'] = 'ufs_notices.db'
+
+# Global debug flag
+DEBUG_MODE = False
+
+def debug_print(*args, **kwargs):
+    """Print only if debug mode is enabled"""
+    if DEBUG_MODE:
+        print(*args, **kwargs)
 
 # Database initialization
 def init_db():
@@ -146,10 +155,23 @@ def scrape_ufs_notices(sjokort_nummer=None, batsportkort=None, days_back=30):
     try:
         # Make GET request with query parameters
         session = requests.Session()
+        
+        debug_print(f"Making request to: {base_url}")
+        debug_print(f"Parameters: {params}")
+        
         response = session.get(base_url, params=params, timeout=10)
         
+        debug_print(f"Response status: {response.status_code}")
+        
         if response.status_code != 200:
-            return {'error': f'Failed to access website: {response.status_code}'}
+            error_msg = f'Failed to access website: {response.status_code}'
+            # Save response for debugging
+            if DEBUG_MODE:
+                debug_file = f'/tmp/ufs_error_{response.status_code}.html'
+                with open(debug_file, 'w', encoding='utf-8') as f:
+                    f.write(response.text)
+                debug_print(f"Saved error response to {debug_file}")
+            return {'error': error_msg, 'status_code': response.status_code}
         
         # Parse results
         soup = BeautifulSoup(response.text, 'html.parser')
@@ -189,35 +211,42 @@ def scrape_ufs_notices(sjokort_nummer=None, batsportkort=None, days_back=30):
             if no_results:
                 return []  # Return empty list, not an error
             
+            # Save the HTML for debugging
+            if DEBUG_MODE:
+                debug_file = '/tmp/ufs_no_table.html'
+                with open(debug_file, 'w', encoding='utf-8') as f:
+                    f.write(response.text)
+                debug_print(f"Saved response with no table to {debug_file}")
+            
             # Return error with some debugging info
-            return {'error': 'Could not find results table on page. The page structure may have changed.', 
-                    'html_sample': str(soup)[:500]}
+            return {'error': 'Could not find results table on page. The page structure may have changed.',
+                    'params': params}
         
         if table:
             rows = table.find_all('tr')[1:]  # Skip header
             
-            print(f"Found table with {len(rows)} rows")
+            debug_print(f"Found table with {len(rows)} rows")
             
             for idx, row in enumerate(rows):
                 cells = row.find_all('td')
-                print(f"\n{'='*60}")
-                print(f"Row {idx}: {len(cells)} cells")
+                debug_print(f"\n{'='*60}")
+                debug_print(f"Row {idx}: {len(cells)} cells")
                 
                 # Check for links in the entire row first
                 all_links = row.find_all('a')
-                print(f"  Found {len(all_links)} link(s) in row")
+                debug_print(f"  Found {len(all_links)} link(s) in row")
                 for link in all_links:
                     href = link.get('href', '')
                     text = link.get_text(strip=True)
-                    print(f"    Link: href='{href}' text='{text}'")
+                    debug_print(f"    Link: href='{href}' text='{text}'")
                 
                 # Print all cells to understand the structure
                 for cell_idx, cell in enumerate(cells):
                     cell_text = cell.get_text(strip=True)
-                    print(f"  Cell {cell_idx}: '{cell_text}'")
+                    debug_print(f"  Cell {cell_idx}: '{cell_text}'")
                     link = cell.find('a')
                     if link:
-                        print(f"    -> Has link: href={link.get('href', 'no href')} text={link.get_text(strip=True)}")
+                        debug_print(f"    -> Has link: href={link.get('href', 'no href')} text={link.get_text(strip=True)}")
                 
                 if len(cells) >= 3:
                     # Extract notice number from link
@@ -231,7 +260,7 @@ def scrape_ufs_notices(sjokort_nummer=None, batsportkort=None, days_back=30):
                             try:
                                 notice_number = href.split('notice=')[1].split('&')[0]
                                 detail_url = f'https://ufs.sjofartsverket.se/Current/NoticeDetails?notice={notice_number}&from=search'
-                                print(f"  ✓ Extracted notice number from link: {notice_number}")
+                                debug_print(f"  ✓ Extracted notice number from link: {notice_number}")
                                 break
                             except:
                                 pass
@@ -239,7 +268,7 @@ def scrape_ufs_notices(sjokort_nummer=None, batsportkort=None, days_back=30):
                             try:
                                 notice_number = href.split('NoticeDetails/')[1].split('/')[0].split('?')[0]
                                 detail_url = f'https://ufs.sjofartsverket.se/Current/NoticeDetails?notice={notice_number}&from=search'
-                                print(f"  ✓ Extracted notice number from link path: {notice_number}")
+                                debug_print(f"  ✓ Extracted notice number from link path: {notice_number}")
                                 break
                             except:
                                 pass
@@ -254,14 +283,14 @@ def scrape_ufs_notices(sjokort_nummer=None, batsportkort=None, days_back=30):
                     published_date = cells[1].get_text(strip=True) if len(cells) > 1 else ''
                     title = cells[2].get_text(strip=True) if len(cells) > 2 else ''
                     
-                    print(f"  Final interpretation:")
-                    print(f"    Notice: {notice_number or 'NOT FOUND'}")
-                    print(f"    Charts: {affected_charts[:60]}...")
-                    print(f"    Date: {published_date}")
-                    print(f"    Title: {title[:60]}...")
+                    debug_print(f"  Final interpretation:")
+                    debug_print(f"    Notice: {notice_number or 'NOT FOUND'}")
+                    debug_print(f"    Charts: {affected_charts[:60]}...")
+                    debug_print(f"    Date: {published_date}")
+                    debug_print(f"    Title: {title[:60]}...")
                     
                     if not notice_number:
-                        print(f"  ⚠️ WARNING: Could not extract notice number!")
+                        debug_print(f"  ⚠️ WARNING: Could not extract notice number!")
                     
                     notice = {
                         'notice_number': notice_number or '',
@@ -288,14 +317,14 @@ def scrape_ufs_notices(sjokort_nummer=None, batsportkort=None, days_back=30):
                             pass
                     
                     notices.append(notice)
-                    print(f"  ✓ Added notice to list (total so far: {len(notices)})")
+                    debug_print(f"  ✓ Added notice to list (total so far: {len(notices)})")
                 else:
-                    print(f"Row {idx}: Skipped - only {len(cells)} cells (need at least 3)")
+                    debug_print(f"Row {idx}: Skipped - only {len(cells)} cells (need at least 3)")
         
         # Log what we found for debugging
-        print(f"Scraped {len(notices)} notices from UFS")
+        debug_print(f"Scraped {len(notices)} notices from UFS")
         if notices:
-            print(f"Sample notice: {notices[0]}")
+            debug_print(f"Sample notice: {notices[0]}")
         
         return notices
     
@@ -314,11 +343,11 @@ def save_notices_to_db(notices):
     skipped_count = 0
     scraped_date = datetime.now().isoformat()
     
-    print(f"\n=== Starting to save {len(notices)} notices to database ===")
+    debug_print(f"\n=== Starting to save {len(notices)} notices to database ===")
     
     for idx, notice in enumerate(notices):
         try:
-            print(f"\nProcessing notice {idx + 1}/{len(notices)}: {notice.get('notice_number', 'NO NUMBER')} - {notice.get('title', '')[:50]}...")
+            debug_print(f"\nProcessing notice {idx + 1}/{len(notices)}: {notice.get('notice_number', 'NO NUMBER')} - {notice.get('title', '')[:50]}...")
             
             # Check if notice already exists
             existing = None
@@ -327,7 +356,7 @@ def save_notices_to_db(notices):
                 c.execute('SELECT id FROM notices WHERE notice_number = ?', 
                          (notice['notice_number'],))
                 existing = c.fetchone()
-                print(f"  Checking for existing by notice_number={notice['notice_number']}: {'Found' if existing else 'Not found'}")
+                debug_print(f"  Checking for existing by notice_number={notice['notice_number']}: {'Found' if existing else 'Not found'}")
             else:
                 # If no notice number, check by title and published date to avoid true duplicates
                 c.execute('''SELECT id FROM notices 
@@ -336,10 +365,10 @@ def save_notices_to_db(notices):
                             LIMIT 1''', 
                          (notice['title'], notice['published_date']))
                 existing = c.fetchone()
-                print(f"  Checking for existing by title+date: {'Found' if existing else 'Not found'}")
+                debug_print(f"  Checking for existing by title+date: {'Found' if existing else 'Not found'}")
             
             if existing:
-                print(f"  Notice exists (id={existing['id']}), updating...")
+                debug_print(f"  Notice exists (id={existing['id']}), updating...")
                 # Update existing notice
                 c.execute('''
                     UPDATE notices 
@@ -358,9 +387,9 @@ def save_notices_to_db(notices):
                     existing['id']
                 ))
                 updated_count += 1
-                print(f"  ✓ Updated")
+                debug_print(f"  ✓ Updated")
             else:
-                print(f"  New notice, inserting...")
+                debug_print(f"  New notice, inserting...")
                 # Insert new notice
                 c.execute('''
                     INSERT INTO notices 
@@ -388,23 +417,23 @@ def save_notices_to_db(notices):
                         VALUES (?, 0)
                     ''', (notice_id,))
                     saved_count += 1
-                    print(f"  ✓ Inserted (id={notice_id})")
+                    debug_print(f"  ✓ Inserted (id={notice_id})")
                 else:
                     skipped_count += 1
-                    print(f"  ✗ Insert returned 0 rows affected")
+                    debug_print(f"  ✗ Insert returned 0 rows affected")
         except Exception as e:
-            print(f"  ✗ Error saving notice: {e}")
-            print(f"  Notice data: {notice}")
+            debug_print(f"  ✗ Error saving notice: {e}")
+            debug_print(f"  Notice data: {notice}")
             skipped_count += 1
     
     conn.commit()
     conn.close()
     
-    print(f"\n=== Database save complete ===")
-    print(f"Saved {saved_count} new notices")
-    print(f"Updated {updated_count} existing notices")
-    print(f"Skipped {skipped_count} notices due to errors")
-    print(f"Total processed: {saved_count + updated_count + skipped_count}/{len(notices)}")
+    debug_print(f"\n=== Database save complete ===")
+    debug_print(f"Saved {saved_count} new notices")
+    debug_print(f"Updated {updated_count} existing notices")
+    debug_print(f"Skipped {skipped_count} notices due to errors")
+    debug_print(f"Total processed: {saved_count + updated_count + skipped_count}/{len(notices)}")
     
     return saved_count
 
@@ -580,6 +609,14 @@ def statistics():
                          recent_searches=recent_searches)
 
 if __name__ == '__main__':
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='UFS Maritime Notices Tracker')
+    parser.add_argument('--debug', action='store_true', help='Enable debug output')
+    args = parser.parse_args()
+    
+    # Set global debug mode
+    DEBUG_MODE = args.debug
+    
     # Initialize database
     init_db()
     
@@ -587,6 +624,8 @@ if __name__ == '__main__':
     print("=" * 60)
     print("UFS Maritime Notices Tracker")
     print("=" * 60)
+    if DEBUG_MODE:
+        print("DEBUG MODE ENABLED")
     print("Starting server on http://0.0.0.0:5000")
     print("Access from this machine: http://127.0.0.1:5000")
     print("Access from network: http://<your-ip>:5000")

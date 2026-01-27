@@ -28,6 +28,18 @@ En standalone Python-webbapplikation för att skrapa, lagra och spåra implement
    ```bash
    python app.py
    ```
+   
+   Eller använd startup-scriptet:
+   ```bash
+   ./start.sh
+   ```
+   
+   För att aktivera debug-utskrifter:
+   ```bash
+   python app.py --debug
+   # eller
+   ./start.sh --debug
+   ```
 
 3. **Öppna webbläsaren**:
    Gå till `http://127.0.0.1:5000`
@@ -142,13 +154,37 @@ Applikationen använder SQLite med följande tabeller:
 ## Felsökning
 
 ### Applikationen startar inte
-- Kontrollera att alla beroenden är installerade: `pip install -r requirements.txt`
+- Kontrollera att alla beroenden är installerade: `pip install -r requirements.txt --break-system-packages`
 - Kontrollera att port 5000 är ledig
 
 ### Inga resultat vid sökning
 - Kontrollera din internetanslutning
 - Verifiera att UFS-webbplatsen är tillgänglig: https://ufs.sjofartsverket.se
 - Kontrollera att sjökortnumret eller båtsporkort är korrekt stavat
+
+### Felmeddelande "Failed to access website: 500"
+Detta kan intyda att båtsportkort-ID:t är felaktigt. För att hitta rätt ID:
+1. Gå till https://ufs.sjofartsverket.se/Notice/Search/
+2. Välj önskat båtsportkort från rullgardinsmenyn
+3. Klicka "Sök"
+4. Kontrollera URL:en - den kommer innehålla något som `SearchFormModel.SmallCraftChart=XXXX`
+5. Uppdatera `get_batsportkort_id()` funktionen i `app.py` med rätt ID
+
+### Felmeddelande "Could not find results table"
+Detta kan intyda att sökningen inte returnerade några resultat eller att sidan har ändrad struktur. Kör med `--debug` flaggan för att spara HTML-filen och inspektera den.
+
+### Debug-läge
+För att få detaljerad information om vad som händer under skrapning:
+```bash
+python app.py --debug
+```
+Detta kommer skriva ut:
+- Alla HTTP-förfrågningar och svar
+- Tabellstruktur och cellinnehåll
+- Extraherad information från varje rad
+- Databasoperationer
+
+I debug-läge sparas också felaktiga HTTP-svar till `/tmp/ufs_error_XXX.html` och `/tmp/ufs_no_table.html` för inspektion.
 
 ### Databasen är tom
 - Databasen skapas automatiskt första gången applikationen körs

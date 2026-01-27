@@ -12,8 +12,9 @@ echo ""
 echo "Starting application..."
 echo "Open your browser at: http://127.0.0.1:5000"
 echo ""
+echo "Use './start.sh --debug' to enable debug output"
 echo "Press Ctrl+C to stop the server"
 echo "================================================"
 echo ""
 
-python app.py
+python app.py "$@"
