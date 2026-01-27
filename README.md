@@ -51,11 +51,12 @@ En standalone Python-webbapplikation för att skrapa, lagra och spåra implement
 1. Öppna startsidan
 2. Ange antingen:
    - **Sjökortnummer** (t.ex. 61, 522, 9221)
-   - **Båtsportkort** - Du kan ange antingen:
-     - Kartnamnet (t.ex. "Bsp Stockholm N 2024")
-     - Direkt kart-ID (t.ex. "5231")
+   - **Båtsportkort** - Ange kartnamnet (t.ex. "Bsp Stockholm N 2024")
 3. Klicka på "Sök och hämta notiser"
 4. Applikationen skrapar UFS-webbplatsen och sparar resultaten i databasen
+
+**OBS**: Applikationen hämtar automatiskt alla tillgängliga sjökort och båtsportkort från 
+UFS-webbplatsen vid varje sökning. Du behöver inte ange ID-nummer manuellt.
 
 **OBS**: Applikationen hämtar endast notiser från tabellen "Notiser för gällande sjökort". 
 Notiser från andra tabeller (som "Tillkännagivanden och notiser utan anknytning till gällande sjökort") 
@@ -65,13 +66,8 @@ ignoreras automatiskt.
 - URL-parametrar används istället för POST-formulär
 - För båtsportkort används `SearchFormModel.SmallCraftChart` med kart-ID
 - För sjökort används `SearchFormModel.Chart`
+- Kart-ID:n hämtas automatiskt från söksidan varje gång
 - Exempel: `https://ufs.sjofartsverket.se/Notice/Search/?SearchFormModel.SmallCraftChart=5231`
-
-**Kända kart-ID för båtsportkort**:
-- Bsp Stockholm N 2024: 5231
-- Bsp Stockholm M 2024: 5230 (exempel, behöver verifieras)
-
-Om du vet fler kart-ID, kan du uppdatera `get_batsportkort_id()` funktionen i `app.py`.
 
 ### 2. Hantera notiser
 
@@ -163,15 +159,12 @@ Applikationen använder SQLite med följande tabeller:
 - Kontrollera att sjökortnumret eller båtsporkort är korrekt stavat
 
 ### Felmeddelande "Failed to access website: 500"
-Detta kan intyda att båtsportkort-ID:t är felaktigt. För att hitta rätt ID:
-1. Gå till https://ufs.sjofartsverket.se/Notice/Search/
-2. Välj önskat båtsportkort från rullgardinsmenyn
-3. Klicka "Sök"
-4. Kontrollera URL:en - den kommer innehålla något som `SearchFormModel.SmallCraftChart=XXXX`
-5. Uppdatera `get_batsportkort_id()` funktionen i `app.py` med rätt ID
+Detta kan intyda att det finns ett problem med UFS-webbplatsen eller att kartnamnet inte kunde mappas korrekt. 
+Kör med `--debug` flaggan för att se vilka parametrar som skickas och vad som returneras.
 
 ### Felmeddelande "Could not find results table"
-Detta kan intyda att sökningen inte returnerade några resultat eller att sidan har ändrad struktur. Kör med `--debug` flaggan för att spara HTML-filen och inspektera den.
+Detta kan intyda att sökningen inte returnerade några resultat eller att sidan har ändrad struktur. 
+Kör med `--debug` flaggan för att spara HTML-filen och inspektera den.
 
 ### Debug-läge
 För att få detaljerad information om vad som händer under skrapning:

@@ -92,43 +92,104 @@ def get_db():
     conn.row_factory = sqlite3.Row
     return conn
 
-def get_batsportkort_id(chart_name):
+def get_chart_mappings():
     """
-    Map båtsportkort chart names to their IDs used in the UFS search.
-    The IDs are used in the URL parameter SearchFormModel.SmallCraftChart
+    Scrape the UFS search page to get the mappings between chart names/numbers and their IDs.
+    Returns a tuple of (sjokort_map, batsportkort_map)
+    """
+    search_url = "https://ufs.sjofartsverket.se/Notice/Search"
     
-    Common chart mappings:
-    - Bsp Stockholm N 2024 -> 5231
-    - Bsp Stockholm M 2024 -> (need to find ID)
-    - etc.
+    try:
+        debug_print(f"Fetching chart mappings from {search_url}")
+        response = requests.get(search_url, timeout=10)
+        
+        if response.status_code != 200:
+            debug_print(f"Failed to fetch search page: {response.status_code}")
+            return {}, {}
+        
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        # Get sjökort mappings from SearchFormModel_ChartNumbers
+        sjokort_map = {}
+        sjokort_select = soup.find('select', {'id': 'SearchFormModel_ChartNumbers'})
+        if sjokort_select:
+            options = sjokort_select.find_all('option')
+            for option in options:
+                value = option.get('value', '')
+                text = option.get_text(strip=True)
+                if value and text and value != '':  # Skip empty options
+                    sjokort_map[text] = value
+            debug_print(f"Found {len(sjokort_map)} sjökort mappings")
+        else:
+            debug_print("Could not find SearchFormModel_ChartNumbers selector")
+        
+        # Get båtsportkort mappings from SearchFormModel_SmallCraftChart
+        batsportkort_map = {}
+        batsportkort_select = soup.find('select', {'id': 'SearchFormModel_SmallCraftChart'})
+        if batsportkort_select:
+            options = batsportkort_select.find_all('option')
+            for option in options:
+                value = option.get('value', '')
+                text = option.get_text(strip=True)
+                if value and text and value != '':  # Skip empty options
+                    batsportkort_map[text] = value
+            debug_print(f"Found {len(batsportkort_map)} båtsportkort mappings")
+        else:
+            debug_print("Could not find SearchFormModel_SmallCraftChart selector")
+        
+        return sjokort_map, batsportkort_map
+    
+    except Exception as e:
+        debug_print(f"Error fetching chart mappings: {e}")
+        return {}, {}
+
+def get_batsportkort_id(chart_name, batsportkort_map):
+    """
+    Map båtsportkort chart name to its ID using the provided mapping.
     
     If the input is already a number, return it as-is.
-    Otherwise, try to extract or look up the ID.
+    Otherwise, look up the ID from the mapping.
     """
     # If it's already a number, return it
     if chart_name.isdigit():
         return chart_name
     
-    # TODO: Build a complete mapping of chart names to IDs
-    # For now, this is a placeholder that users can expand
-    chart_id_map = {
-        'Bsp Stockholm N 2024': '5231',
-        'Bsp Stockholm M 2024': '5230',  # Example, needs verification
-    }
-    
     # Try exact match first
-    if chart_name in chart_id_map:
-        return chart_id_map[chart_name]
+    if chart_name in batsportkort_map:
+        debug_print(f"Mapped '{chart_name}' to ID '{batsportkort_map[chart_name]}'")
+        return batsportkort_map[chart_name]
     
     # Try case-insensitive match
-    for name, chart_id in chart_id_map.items():
+    for name, chart_id in batsportkort_map.items():
         if name.lower() == chart_name.lower():
+            debug_print(f"Mapped '{chart_name}' to ID '{chart_id}' (case-insensitive)")
             return chart_id
     
     # If no match found, return the input as-is
-    # (user might be entering the ID directly)
+    debug_print(f"No mapping found for '{chart_name}', using as-is")
     return chart_name
 
+def get_sjokort_id(chart_number, sjokort_map):
+    """
+    Map sjökort chart number to its ID using the provided mapping.
+    
+    If the input is in the mapping, return the ID.
+    Otherwise, return the input as-is.
+    """
+    # Try exact match
+    if chart_number in sjokort_map:
+        debug_print(f"Mapped sjökort '{chart_number}' to ID '{sjokort_map[chart_number]}'")
+        return sjokort_map[chart_number]
+    
+    # Try as string if it was provided as number
+    chart_str = str(chart_number)
+    if chart_str in sjokort_map:
+        debug_print(f"Mapped sjökort '{chart_str}' to ID '{sjokort_map[chart_str]}'")
+        return sjokort_map[chart_str]
+    
+    # If no match found, return the input as-is
+    debug_print(f"No mapping found for sjökort '{chart_number}', using as-is")
+    return chart_number
 def scrape_ufs_notices(sjokort_nummer=None, batsportkort=None, days_back=30):
     """
     Scrape notices from UFS website
@@ -136,17 +197,21 @@ def scrape_ufs_notices(sjokort_nummer=None, batsportkort=None, days_back=30):
     """
     base_url = "https://ufs.sjofartsverket.se/Notice/Search/"
     
+    # First, get the chart mappings from the search page
+    sjokort_map, batsportkort_map = get_chart_mappings()
+    
     # Prepare query parameters (URL parameters, not form data)
     params = {}
     
     if batsportkort:
-        # For båtsportkort, convert name to ID if needed
-        chart_id = get_batsportkort_id(batsportkort)
+        # For båtsportkort, convert name to ID using the scraped mapping
+        chart_id = get_batsportkort_id(batsportkort, batsportkort_map)
         params['SearchFormModel.SmallCraftChart'] = chart_id
     
     if sjokort_nummer:
-        # For sjökort (nautical charts)
-        params['SearchFormModel.Chart'] = sjokort_nummer
+        # For sjökort (nautical charts), convert to ID using the scraped mapping
+        chart_id = get_sjokort_id(sjokort_nummer, sjokort_map)
+        params['SearchFormModel.Chart'] = chart_id
     
     # Set time period
     # 0 = All time, 1 = Last week, 2 = Last month, etc.
