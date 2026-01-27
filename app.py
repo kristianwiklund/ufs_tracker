@@ -37,7 +37,7 @@ def init_db():
             content TEXT,
             url TEXT,
             scraped_date TEXT,
-            UNIQUE(notice_number, sjokort_nummer, batsportkort)
+            UNIQUE(notice_number)
         )
     ''')
     
@@ -152,12 +152,31 @@ def scrape_ufs_notices(sjokort_nummer=None, batsportkort=None, days_back=30):
         
         notices = []
         
-        # Find the results table - try multiple possible selectors
-        table = soup.find('table', {'class': 'table'})
+        # Find the specific table for "Notiser för gällande sjökort"
+        # Look for a heading or caption that identifies this table
+        table = None
+        
+        # Try to find by heading
+        heading = soup.find(['h2', 'h3', 'h4'], string=re.compile(r'Notiser för gällande sjökort', re.IGNORECASE))
+        if heading:
+            # Find the next table after this heading
+            table = heading.find_next('table')
+        
+        # If not found by heading, try to find by table caption
         if not table:
-            table = soup.find('table', {'id': 'searchResults'})
+            captions = soup.find_all('caption')
+            for caption in captions:
+                if re.search(r'Notiser för gällande sjökort', caption.get_text(), re.IGNORECASE):
+                    table = caption.find_parent('table')
+                    break
+        
+        # If still not found, try finding the table by id or class that might indicate it's the main results
         if not table:
-            table = soup.find('table')
+            table = soup.find('table', {'id': re.compile(r'notice|result', re.IGNORECASE)})
+        
+        # Last resort: find first table with class 'table'
+        if not table:
+            table = soup.find('table', {'class': 'table'})
         
         if not table:
             # No table found - might be a different page structure or no results
@@ -268,42 +287,69 @@ def save_notices_to_db(notices):
     c = conn.cursor()
     
     saved_count = 0
+    updated_count = 0
     scraped_date = datetime.now().isoformat()
     
     for notice in notices:
         try:
-            c.execute('''
-                INSERT OR IGNORE INTO notices 
-                (notice_number, title, affected_charts, sjokort_nummer, batsportkort, published_date, 
-                 area, content, url, scraped_date)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (
-                notice['notice_number'],
-                notice['title'],
-                notice.get('affected_charts', ''),
-                notice['sjokort_nummer'],
-                notice['batsportkort'],
-                notice['published_date'],
-                notice.get('area', ''),
-                notice.get('content', ''),
-                notice.get('url', ''),
-                scraped_date
-            ))
+            # Check if notice already exists
+            c.execute('SELECT id FROM notices WHERE notice_number = ? AND notice_number != ""', 
+                     (notice['notice_number'],))
+            existing = c.fetchone()
             
-            if c.rowcount > 0:
-                # Create implementation status entry
-                notice_id = c.lastrowid
+            if existing and notice['notice_number']:
+                # Update existing notice
                 c.execute('''
-                    INSERT INTO implementation_status (notice_id, implemented)
-                    VALUES (?, 0)
-                ''', (notice_id,))
-                saved_count += 1
+                    UPDATE notices 
+                    SET title = ?, affected_charts = ?, published_date = ?, 
+                        content = ?, url = ?, scraped_date = ?
+                    WHERE id = ?
+                ''', (
+                    notice['title'],
+                    notice.get('affected_charts', ''),
+                    notice['published_date'],
+                    notice.get('content', ''),
+                    notice.get('url', ''),
+                    scraped_date,
+                    existing['id']
+                ))
+                updated_count += 1
+            else:
+                # Insert new notice
+                c.execute('''
+                    INSERT INTO notices 
+                    (notice_number, title, affected_charts, sjokort_nummer, batsportkort, published_date, 
+                     area, content, url, scraped_date)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    notice['notice_number'],
+                    notice['title'],
+                    notice.get('affected_charts', ''),
+                    notice['sjokort_nummer'],
+                    notice['batsportkort'],
+                    notice['published_date'],
+                    notice.get('area', ''),
+                    notice.get('content', ''),
+                    notice.get('url', ''),
+                    scraped_date
+                ))
+                
+                if c.rowcount > 0:
+                    # Create implementation status entry for new notice
+                    notice_id = c.lastrowid
+                    c.execute('''
+                        INSERT INTO implementation_status (notice_id, implemented)
+                        VALUES (?, 0)
+                    ''', (notice_id,))
+                    saved_count += 1
         except Exception as e:
             print(f"Error saving notice: {e}")
+            print(f"Notice data: {notice}")
     
     conn.commit()
     conn.close()
     
+    print(f"Saved {saved_count} new notices, updated {updated_count} existing notices")
     return saved_count
 
 # Routes

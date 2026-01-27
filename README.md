@@ -45,6 +45,10 @@ En standalone Python-webbapplikation för att skrapa, lagra och spåra implement
 3. Klicka på "Sök och hämta notiser"
 4. Applikationen skrapar UFS-webbplatsen och sparar resultaten i databasen
 
+**OBS**: Applikationen hämtar endast notiser från tabellen "Notiser för gällande sjökort". 
+Notiser från andra tabeller (som "Tillkännagivanden och notiser utan anknytning till gällande sjökort") 
+ignoreras automatiskt.
+
 **OBS**: Applikationen använder nu samma sökning som UFS-webbplatsen:
 - URL-parametrar används istället för POST-formulär
 - För båtsportkort används `SearchFormModel.SmallCraftChart` med kart-ID
