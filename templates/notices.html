@@ -326,17 +326,19 @@
                     <div class="notice-card {% if notice.implemented %}implemented{% endif %}">
                         <div class="notice-header">
                             <div class="notice-number">
-                                {% if notice.url %}
-                                <a href="{{ notice.url }}" target="_blank" title="Klicka för att se fullständig beskrivning">
+                                {% if notice.notice_number %}
+                                <a href="https://ufs.sjofartsverket.se/Current/NoticeDetails?notice={{ notice.notice_number }}&from=search" 
+                                   target="_blank" 
+                                   title="Klicka för att se fullständig beskrivning">
                                     {{ notice.notice_number }}
                                 </a>
-                                {% else %}
-                                {{ notice.notice_number }}
                                 {% endif %}
                             </div>
                             <div class="notice-title">
-                                {% if notice.url %}
-                                <a href="{{ notice.url }}" target="_blank" title="Klicka för att se fullständig beskrivning">
+                                {% if notice.notice_number %}
+                                <a href="https://ufs.sjofartsverket.se/Current/NoticeDetails?notice={{ notice.notice_number }}&from=search" 
+                                   target="_blank" 
+                                   title="Klicka för att se fullständig beskrivning">
                                     {{ notice.title }}
                                 </a>
                                 {% else %}
@@ -346,6 +348,11 @@
                         </div>
                         
                         <div class="notice-info">
+                            {% if notice.affected_charts %}
+                            <strong>Berörda kort:</strong>
+                            <span>{{ notice.affected_charts }}</span>
+                            {% endif %}
+                            
                             {% if notice.sjokort_nummer %}
                             <strong>Sjökortnummer:</strong>
                             <span>{{ notice.sjokort_nummer }}</span>
@@ -394,8 +401,10 @@
                                    value="{{ notice.notes or '' }}"
                                    onblur="saveNotes({{ notice.id }}, this.value)">
                             
-                            {% if notice.url %}
-                            <a href="{{ notice.url }}" target="_blank" class="link-button">
+                            {% if notice.notice_number %}
+                            <a href="https://ufs.sjofartsverket.se/Current/NoticeDetails?notice={{ notice.notice_number }}&from=search" 
+                               target="_blank" 
+                               class="link-button">
                                 Visa detaljer ↗
                             </a>
                             {% endif %}

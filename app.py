@@ -7,6 +7,7 @@ from Swedish Maritime Administration
 
 import sqlite3
 import requests
+import re
 from flask import Flask, render_template, request, jsonify, redirect, url_for
 from datetime import datetime
 from bs4 import BeautifulSoup
@@ -28,6 +29,7 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             notice_number TEXT,
             title TEXT,
+            affected_charts TEXT,
             sjokort_nummer TEXT,
             batsportkort TEXT,
             published_date TEXT,
@@ -59,6 +61,14 @@ def init_db():
             results_count INTEGER
         )
     ''')
+    
+    # Migration: Add affected_charts column if it doesn't exist
+    try:
+        c.execute("ALTER TABLE notices ADD COLUMN affected_charts TEXT")
+        conn.commit()
+    except sqlite3.OperationalError:
+        # Column already exists
+        pass
     
     conn.commit()
     conn.close()
@@ -142,35 +152,92 @@ def scrape_ufs_notices(sjokort_nummer=None, batsportkort=None, days_back=30):
         
         notices = []
         
-        # Find the results table
-        table = soup.find('table', {'class': 'table'}) or soup.find('table')
+        # Find the results table - try multiple possible selectors
+        table = soup.find('table', {'class': 'table'})
+        if not table:
+            table = soup.find('table', {'id': 'searchResults'})
+        if not table:
+            table = soup.find('table')
+        
+        if not table:
+            # No table found - might be a different page structure or no results
+            # Check if there's a "no results" message
+            no_results = soup.find(string=re.compile(r'(inga|no).*(resultat|results)', re.IGNORECASE))
+            if no_results:
+                return []  # Return empty list, not an error
+            
+            # Return error with some debugging info
+            return {'error': 'Could not find results table on page. The page structure may have changed.', 
+                    'html_sample': str(soup)[:500]}
         
         if table:
             rows = table.find_all('tr')[1:]  # Skip header
             
             for row in rows:
                 cells = row.find_all('td')
-                if len(cells) >= 4:
+                if len(cells) >= 3:  # Need at least 3 cells: affected charts, title, date
+                    # Extract basic information
+                    affected_charts = cells[0].get_text(strip=True) if len(cells) > 0 else ''
+                    title = cells[1].get_text(strip=True) if len(cells) > 1 else ''
+                    published_date = cells[2].get_text(strip=True) if len(cells) > 2 else ''
+                    
+                    # Try to extract notice number from the detail link
+                    notice_number = None
+                    detail_url = None
+                    
+                    # Look for a link in the title cell (usually the second cell)
+                    link = cells[1].find('a') if len(cells) > 1 else None
+                    if link and link.get('href'):
+                        href = link.get('href')
+                        # Try to extract notice number from various URL patterns
+                        if 'notice=' in href:
+                            try:
+                                notice_number = href.split('notice=')[1].split('&')[0]
+                            except:
+                                pass
+                        elif 'NoticeDetails/' in href:
+                            try:
+                                # Handle pattern like /Current/NoticeDetails/19697
+                                notice_number = href.split('NoticeDetails/')[1].split('/')[0].split('?')[0]
+                            except:
+                                pass
+                        
+                        # Construct full URL
+                        if notice_number:
+                            detail_url = f'https://ufs.sjofartsverket.se/Current/NoticeDetails?notice={notice_number}&from=search'
+                        elif not href.startswith('http'):
+                            detail_url = 'https://ufs.sjofartsverket.se' + href
+                        else:
+                            detail_url = href
+                    
+                    # If we still don't have a notice number, try to extract it from other cells
+                    if not notice_number:
+                        # Sometimes the notice number might be in the text somewhere
+                        for cell in cells:
+                            text = cell.get_text(strip=True)
+                            # Look for patterns like "19697" or "UfS 19697"
+                            match = re.search(r'UfS?\s*(\d{4,6})', text, re.IGNORECASE)
+                            if not match:
+                                match = re.search(r'\b(\d{4,6})\b', text)
+                            if match:
+                                notice_number = match.group(1)
+                                detail_url = f'https://ufs.sjofartsverket.se/Current/NoticeDetails?notice={notice_number}&from=search'
+                                break
+                    
                     notice = {
-                        'notice_number': cells[0].get_text(strip=True),
-                        'title': cells[1].get_text(strip=True),
-                        'published_date': cells[2].get_text(strip=True),
+                        'notice_number': notice_number or '',
+                        'affected_charts': affected_charts,
+                        'title': title,
+                        'published_date': published_date,
                         'sjokort_nummer': sjokort_nummer or '',
                         'batsportkort': batsportkort or '',
                         'area': '',
                         'content': '',
-                        'url': ''
+                        'url': detail_url or ''
                     }
                     
-                    # Try to get detail link
-                    link = cells[1].find('a')
-                    if link and link.get('href'):
-                        detail_url = link.get('href')
-                        if not detail_url.startswith('http'):
-                            detail_url = 'https://ufs.sjofartsverket.se' + detail_url
-                        notice['url'] = detail_url
-                        
-                        # Fetch detail page for full content
+                    # Fetch detail page for full content
+                    if detail_url:
                         try:
                             detail_response = session.get(detail_url, timeout=10)
                             if detail_response.status_code == 200:
@@ -182,6 +249,11 @@ def scrape_ufs_notices(sjokort_nummer=None, batsportkort=None, days_back=30):
                             pass
                     
                     notices.append(notice)
+        
+        # Log what we found for debugging
+        print(f"Scraped {len(notices)} notices from UFS")
+        if notices:
+            print(f"Sample notice: {notices[0]}")
         
         return notices
     
@@ -202,12 +274,13 @@ def save_notices_to_db(notices):
         try:
             c.execute('''
                 INSERT OR IGNORE INTO notices 
-                (notice_number, title, sjokort_nummer, batsportkort, published_date, 
+                (notice_number, title, affected_charts, sjokort_nummer, batsportkort, published_date, 
                  area, content, url, scraped_date)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 notice['notice_number'],
                 notice['title'],
+                notice.get('affected_charts', ''),
                 notice['sjokort_nummer'],
                 notice['batsportkort'],
                 notice['published_date'],
@@ -288,7 +361,7 @@ def list_notices():
     show_implemented = request.args.get('show_implemented', '1')
     
     query = '''
-        SELECT n.id, n.notice_number, n.title, n.sjokort_nummer, n.batsportkort,
+        SELECT n.id, n.notice_number, n.title, n.affected_charts, n.sjokort_nummer, n.batsportkort,
                n.published_date, n.content, n.url, n.scraped_date,
                i.implemented, i.implemented_date, i.notes
         FROM notices n

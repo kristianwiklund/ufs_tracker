@@ -83,14 +83,15 @@ Applikationen använder SQLite med följande tabeller:
 
 ### `notices`
 - **id**: Unikt ID
-- **notice_number**: Notisnummer från UFS
+- **notice_number**: Faktiskt notisnummer från UFS (används för att bygga länkar)
 - **title**: Rubrik på notisen
-- **sjokort_nummer**: Sjökortnummer
-- **batsportkort**: Båtsportkort
+- **affected_charts**: Lista över berörda sjökort/båtsportkort
+- **sjokort_nummer**: Sökt sjökortnummer
+- **batsportkort**: Sökt båtsportkort
 - **published_date**: Publiceringsdatum
 - **area**: Geografiskt område
 - **content**: Fullständig text
-- **url**: Länk till originalnotisen
+- **url**: Länk till originalnotisen (genereras automatiskt från notice_number)
 - **scraped_date**: När notisen hämtades
 
 ### `implementation_status`
