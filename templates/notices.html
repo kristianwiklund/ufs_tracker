@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Notiser - UFS Tracker</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }
+        
+        header {
+            background: #2c3e50;
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        header h1 {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+        
+        nav {
+            background: #34495e;
+            padding: 15px 30px;
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+        
+        nav a {
+            color: white;
+            text-decoration: none;
+            padding: 8px 16px;
+            border-radius: 5px;
+            transition: background 0.3s;
+        }
+        
+        nav a:hover {
+            background: #2c3e50;
+        }
+        
+        nav a.active {
+            background: #667eea;
+        }
+        
+        .content {
+            padding: 40px;
+        }
+        
+        .filter-section {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+        }
+        
+        .filter-section h3 {
+            margin-bottom: 15px;
+            color: #2c3e50;
+        }
+        
+        .filter-group {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        
+        .filter-group label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .filter-group input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+        }
+        
+        .notice-count {
+            background: #667eea;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            display: inline-block;
+        }
+        
+        .notices-grid {
+            display: grid;
+            gap: 20px;
+        }
+        
+        .notice-card {
+            background: white;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 20px;
+            transition: all 0.3s;
+        }
+        
+        .notice-card:hover {
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            border-color: #667eea;
+        }
+        
+        .notice-card.implemented {
+            background: #f0f8f0;
+            border-color: #4caf50;
+        }
+        
+        .notice-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 15px;
+            gap: 15px;
+        }
+        
+        .notice-number {
+            background: #667eea;
+            color: white;
+            padding: 5px 12px;
+            border-radius: 5px;
+            font-weight: bold;
+            font-size: 0.9em;
+        }
+        
+        .notice-title {
+            flex: 1;
+            font-size: 1.1em;
+            color: #2c3e50;
+            font-weight: 600;
+        }
+        
+        .notice-info {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 10px 15px;
+            margin-bottom: 15px;
+            font-size: 0.95em;
+        }
+        
+        .notice-info strong {
+            color: #666;
+        }
+        
+        .notice-content {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+            color: #333;
+            line-height: 1.6;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        
+        .notice-actions {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #e0e0e0;
+        }
+        
+        .checkbox-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .checkbox-container input[type="checkbox"] {
+            width: 22px;
+            height: 22px;
+            cursor: pointer;
+        }
+        
+        .checkbox-container label {
+            cursor: pointer;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+        
+        .implemented-badge {
+            background: #4caf50;
+            color: white;
+            padding: 5px 12px;
+            border-radius: 5px;
+            font-size: 0.85em;
+            font-weight: bold;
+        }
+        
+        .implemented-date {
+            color: #666;
+            font-size: 0.9em;
+        }
+        
+        .notes-input {
+            flex: 1;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 0.9em;
+        }
+        
+        .link-button {
+            background: #2196F3;
+            color: white;
+            padding: 8px 15px;
+            text-decoration: none;
+            border-radius: 5px;
+            font-size: 0.9em;
+            transition: background 0.3s;
+        }
+        
+        .link-button:hover {
+            background: #1976D2;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #666;
+        }
+        
+        .empty-state h3 {
+            margin-bottom: 10px;
+            color: #2c3e50;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>⚓ Notiser</h1>
+            <p>Hantera och spåra implementering av underrättelser</p>
+        </header>
+        
+        <nav>
+            <a href="/">Hem</a>
+            <a href="/notices" class="active">Visa notiser</a>
+            <a href="/statistics">Statistik</a>
+        </nav>
+        
+        <div class="content">
+            <div class="filter-section">
+                <h3>🔍 Filter</h3>
+                <form method="get" action="/notices">
+                    <div class="filter-group">
+                        <label>
+                            Sjökortnummer:
+                            <input type="text" name="sjokort" value="{{ sjokort }}" 
+                                   placeholder="t.ex. 61" style="padding: 5px; border: 1px solid #ddd; border-radius: 3px;">
+                        </label>
+                        
+                        <label>
+                            Båtsportkort:
+                            <input type="text" name="batsportkort" value="{{ batsportkort }}" 
+                                   placeholder="t.ex. Bsp Stockholm N 2024" 
+                                   style="padding: 5px; border: 1px solid #ddd; border-radius: 3px; min-width: 200px;">
+                        </label>
+                        
+                        <label>
+                            <input type="checkbox" name="show_implemented" value="1" 
+                                   {% if show_implemented == '1' %}checked{% endif %}>
+                            Visa implementerade
+                        </label>
+                        
+                        <button type="submit" style="background: #667eea; color: white; border: none; 
+                                padding: 8px 20px; border-radius: 5px; cursor: pointer;">
+                            Filtrera
+                        </button>
+                    </div>
+                </form>
+            </div>
+            
+            {% if notices %}
+                <div class="notice-count">
+                    📊 Visar {{ notices|length }} notis(er)
+                </div>
+                
+                <div class="notices-grid">
+                    {% for notice in notices %}
+                    <div class="notice-card {% if notice.implemented %}implemented{% endif %}">
+                        <div class="notice-header">
+                            <div class="notice-number">{{ notice.notice_number }}</div>
+                            <div class="notice-title">{{ notice.title }}</div>
+                        </div>
+                        
+                        <div class="notice-info">
+                            {% if notice.sjokort_nummer %}
+                            <strong>Sjökortnummer:</strong>
+                            <span>{{ notice.sjokort_nummer }}</span>
+                            {% endif %}
+                            
+                            {% if notice.batsportkort %}
+                            <strong>Båtsportkort:</strong>
+                            <span>{{ notice.batsportkort }}</span>
+                            {% endif %}
+                            
+                            <strong>Publicerad:</strong>
+                            <span>{{ notice.published_date }}</span>
+                            
+                            {% if notice.scraped_date %}
+                            <strong>Hämtad:</strong>
+                            <span>{{ notice.scraped_date[:10] }}</span>
+                            {% endif %}
+                        </div>
+                        
+                        {% if notice.content %}
+                        <div class="notice-content">
+                            {{ notice.content }}
+                        </div>
+                        {% endif %}
+                        
+                        <div class="notice-actions">
+                            <div class="checkbox-container">
+                                <input type="checkbox" 
+                                       id="implemented_{{ notice.id }}" 
+                                       {% if notice.implemented %}checked{% endif %}
+                                       onchange="updateStatus({{ notice.id }}, this.checked)">
+                                <label for="implemented_{{ notice.id }}">Implementerad</label>
+                            </div>
+                            
+                            {% if notice.implemented %}
+                                <span class="implemented-badge">✓ Genomförd</span>
+                                {% if notice.implemented_date %}
+                                <span class="implemented-date">{{ notice.implemented_date[:10] }}</span>
+                                {% endif %}
+                            {% endif %}
+                            
+                            <input type="text" 
+                                   class="notes-input" 
+                                   id="notes_{{ notice.id }}"
+                                   placeholder="Anteckningar..."
+                                   value="{{ notice.notes or '' }}"
+                                   onblur="saveNotes({{ notice.id }}, this.value)">
+                            
+                            {% if notice.url %}
+                            <a href="{{ notice.url }}" target="_blank" class="link-button">
+                                Visa detaljer ↗
+                            </a>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="empty-state">
+                    <h3>📭 Inga notiser hittades</h3>
+                    <p>Börja med att söka efter notiser på startsidan.</p>
+                    <br>
+                    <a href="/" style="background: #667eea; color: white; padding: 12px 30px; 
+                              text-decoration: none; border-radius: 5px; display: inline-block;">
+                        Till söksidan
+                    </a>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+    
+    <script>
+        async function updateStatus(noticeId, implemented) {
+            const notesInput = document.getElementById('notes_' + noticeId);
+            const notes = notesInput ? notesInput.value : '';
+            
+            try {
+                const response = await fetch('/update_status/' + noticeId, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        implemented: implemented,
+                        notes: notes
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    // Refresh page to show updated status
+                    location.reload();
+                }
+            } catch (error) {
+                console.error('Error updating status:', error);
+                alert('Kunde inte uppdatera status: ' + error.message);
+            }
+        }
+        
+        async function saveNotes(noticeId, notes) {
+            const checkbox = document.getElementById('implemented_' + noticeId);
+            const implemented = checkbox ? checkbox.checked : false;
+            
+            try {
+                await fetch('/update_status/' + noticeId, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        implemented: implemented,
+                        notes: notes
+                    })
+                });
+            } catch (error) {
+                console.error('Error saving notes:', error);
+            }
+        }
+    </script>
+</body>
+</html>

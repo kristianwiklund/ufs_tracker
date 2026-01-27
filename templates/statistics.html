@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Statistik - UFS Tracker</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }
+        
+        header {
+            background: #2c3e50;
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        header h1 {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+        
+        nav {
+            background: #34495e;
+            padding: 15px 30px;
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+        
+        nav a {
+            color: white;
+            text-decoration: none;
+            padding: 8px 16px;
+            border-radius: 5px;
+            transition: background 0.3s;
+        }
+        
+        nav a:hover {
+            background: #2c3e50;
+        }
+        
+        nav a.active {
+            background: #667eea;
+        }
+        
+        .content {
+            padding: 40px;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+        
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        
+        .stat-card h3 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        .stat-card p {
+            opacity: 0.9;
+            font-size: 1.1em;
+        }
+        
+        .section {
+            background: #f8f9fa;
+            padding: 30px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+        }
+        
+        .section h2 {
+            color: #2c3e50;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 3px solid #667eea;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        
+        table th {
+            background: #667eea;
+            color: white;
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+        }
+        
+        table td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        table tr:hover {
+            background: #f8f9fa;
+        }
+        
+        table tr:last-child td {
+            border-bottom: none;
+        }
+        
+        .badge {
+            background: #667eea;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.85em;
+            font-weight: bold;
+        }
+        
+        .empty-message {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 30px;
+            background: #e0e0e0;
+            border-radius: 15px;
+            overflow: hidden;
+            margin-top: 20px;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4caf50 0%, #8bc34a 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            transition: width 0.3s;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📊 Statistik</h1>
+            <p>Översikt över dina underrättelser och implementering</p>
+        </header>
+        
+        <nav>
+            <a href="/">Hem</a>
+            <a href="/notices">Visa notiser</a>
+            <a href="/statistics" class="active">Statistik</a>
+        </nav>
+        
+        <div class="content">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <h3>{{ total_notices }}</h3>
+                    <p>Totalt antal notiser</p>
+                </div>
+                
+                <div class="stat-card">
+                    <h3>{{ implemented }}</h3>
+                    <p>Implementerade</p>
+                </div>
+                
+                <div class="stat-card">
+                    <h3>{{ total_notices - implemented }}</h3>
+                    <p>Återstår</p>
+                </div>
+                
+                <div class="stat-card">
+                    <h3>{% if total_notices > 0 %}{{ ((implemented / total_notices) * 100)|round|int }}%{% else %}0%{% endif %}</h3>
+                    <p>Genomföranderad</p>
+                </div>
+            </div>
+            
+            {% if total_notices > 0 %}
+            <div class="section">
+                <h2>📈 Implementeringsgrad</h2>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: {% if total_notices > 0 %}{{ (implemented / total_notices) * 100 }}%{% else %}0%{% endif %}">
+                        {% if total_notices > 0 %}{{ ((implemented / total_notices) * 100)|round|int }}%{% else %}0%{% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+            
+            {% if by_sjokort %}
+            <div class="section">
+                <h2>🗺️ Notiser per sjökortnummer</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Sjökortnummer</th>
+                            <th>Antal notiser</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in by_sjokort %}
+                        <tr>
+                            <td><strong>{{ item[0] }}</strong></td>
+                            <td><span class="badge">{{ item[1] }}</span></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% endif %}
+            
+            {% if by_batsportkort %}
+            <div class="section">
+                <h2>⛵ Notiser per båtsportkort</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Båtsportkort</th>
+                            <th>Antal notiser</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in by_batsportkort %}
+                        <tr>
+                            <td>{{ item[0] }}</td>
+                            <td><span class="badge">{{ item[1] }}</span></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% endif %}
+            
+            {% if recent_searches %}
+            <div class="section">
+                <h2>🔍 Senaste sökningarna</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Sökterm</th>
+                            <th>Typ</th>
+                            <th>Datum</th>
+                            <th>Antal resultat</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for search in recent_searches %}
+                        <tr>
+                            <td><strong>{{ search[0] }}</strong></td>
+                            <td>{{ search[1] }}</td>
+                            <td>{{ search[2][:19] }}</td>
+                            <td><span class="badge">{{ search[3] }}</span></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% endif %}
+            
+            {% if not total_notices %}
+            <div class="empty-message">
+                <h3>📭 Ingen statistik ännu</h3>
+                <p>Börja med att söka efter notiser på startsidan för att se statistik här.</p>
+                <br>
+                <a href="/" style="background: #667eea; color: white; padding: 12px 30px; 
+                          text-decoration: none; border-radius: 5px; display: inline-block;">
+                    Till söksidan
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</body>
+</html>
