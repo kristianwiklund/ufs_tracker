@@ -192,13 +192,21 @@ def scrape_ufs_notices(sjokort_nummer=None, batsportkort=None, days_back=30):
         if table:
             rows = table.find_all('tr')[1:]  # Skip header
             
-            for row in rows:
+            print(f"Found table with {len(rows)} rows")
+            
+            for idx, row in enumerate(rows):
                 cells = row.find_all('td')
+                print(f"Row {idx}: {len(cells)} cells")
+                
                 if len(cells) >= 3:  # Need at least 3 cells: affected charts, title, date
                     # Extract basic information
                     affected_charts = cells[0].get_text(strip=True) if len(cells) > 0 else ''
                     title = cells[1].get_text(strip=True) if len(cells) > 1 else ''
                     published_date = cells[2].get_text(strip=True) if len(cells) > 2 else ''
+                    
+                    print(f"  Affected charts: {affected_charts[:50]}...")
+                    print(f"  Title: {title[:50]}...")
+                    print(f"  Date: {published_date}")
                     
                     # Try to extract notice number from the detail link
                     notice_number = None
@@ -208,16 +216,19 @@ def scrape_ufs_notices(sjokort_nummer=None, batsportkort=None, days_back=30):
                     link = cells[1].find('a') if len(cells) > 1 else None
                     if link and link.get('href'):
                         href = link.get('href')
+                        print(f"  Found link: {href}")
                         # Try to extract notice number from various URL patterns
                         if 'notice=' in href:
                             try:
                                 notice_number = href.split('notice=')[1].split('&')[0]
+                                print(f"  Extracted notice number from param: {notice_number}")
                             except:
                                 pass
                         elif 'NoticeDetails/' in href:
                             try:
                                 # Handle pattern like /Current/NoticeDetails/19697
                                 notice_number = href.split('NoticeDetails/')[1].split('/')[0].split('?')[0]
+                                print(f"  Extracted notice number from path: {notice_number}")
                             except:
                                 pass
                         
@@ -228,11 +239,13 @@ def scrape_ufs_notices(sjokort_nummer=None, batsportkort=None, days_back=30):
                             detail_url = 'https://ufs.sjofartsverket.se' + href
                         else:
                             detail_url = href
+                    else:
+                        print(f"  No link found in title cell")
                     
                     # If we still don't have a notice number, try to extract it from other cells
                     if not notice_number:
                         # Sometimes the notice number might be in the text somewhere
-                        for cell in cells:
+                        for cell_idx, cell in enumerate(cells):
                             text = cell.get_text(strip=True)
                             # Look for patterns like "19697" or "UfS 19697"
                             match = re.search(r'UfS?\s*(\d{4,6})', text, re.IGNORECASE)
@@ -241,7 +254,11 @@ def scrape_ufs_notices(sjokort_nummer=None, batsportkort=None, days_back=30):
                             if match:
                                 notice_number = match.group(1)
                                 detail_url = f'https://ufs.sjofartsverket.se/Current/NoticeDetails?notice={notice_number}&from=search'
+                                print(f"  Extracted notice number from cell {cell_idx} text: {notice_number}")
                                 break
+                    
+                    if not notice_number:
+                        print(f"  WARNING: Could not extract notice number for row {idx}")
                     
                     notice = {
                         'notice_number': notice_number or '',
@@ -268,6 +285,9 @@ def scrape_ufs_notices(sjokort_nummer=None, batsportkort=None, days_back=30):
                             pass
                     
                     notices.append(notice)
+                    print(f"  Added notice to list (total so far: {len(notices)})")
+                else:
+                    print(f"Row {idx}: Skipped - only {len(cells)} cells")
         
         # Log what we found for debugging
         print(f"Scraped {len(notices)} notices from UFS")
@@ -288,16 +308,22 @@ def save_notices_to_db(notices):
     
     saved_count = 0
     updated_count = 0
+    skipped_count = 0
     scraped_date = datetime.now().isoformat()
     
-    for notice in notices:
+    print(f"\n=== Starting to save {len(notices)} notices to database ===")
+    
+    for idx, notice in enumerate(notices):
         try:
+            print(f"\nProcessing notice {idx + 1}/{len(notices)}: {notice.get('notice_number', 'NO NUMBER')} - {notice.get('title', '')[:50]}...")
+            
             # Check if notice already exists
             c.execute('SELECT id FROM notices WHERE notice_number = ? AND notice_number != ""', 
                      (notice['notice_number'],))
             existing = c.fetchone()
             
             if existing and notice['notice_number']:
+                print(f"  Notice exists (id={existing['id']}), updating...")
                 # Update existing notice
                 c.execute('''
                     UPDATE notices 
@@ -314,7 +340,9 @@ def save_notices_to_db(notices):
                     existing['id']
                 ))
                 updated_count += 1
+                print(f"  ✓ Updated")
             else:
+                print(f"  New notice, inserting...")
                 # Insert new notice
                 c.execute('''
                     INSERT INTO notices 
@@ -342,14 +370,24 @@ def save_notices_to_db(notices):
                         VALUES (?, 0)
                     ''', (notice_id,))
                     saved_count += 1
+                    print(f"  ✓ Inserted (id={notice_id})")
+                else:
+                    skipped_count += 1
+                    print(f"  ✗ Insert returned 0 rows affected")
         except Exception as e:
-            print(f"Error saving notice: {e}")
-            print(f"Notice data: {notice}")
+            print(f"  ✗ Error saving notice: {e}")
+            print(f"  Notice data: {notice}")
+            skipped_count += 1
     
     conn.commit()
     conn.close()
     
-    print(f"Saved {saved_count} new notices, updated {updated_count} existing notices")
+    print(f"\n=== Database save complete ===")
+    print(f"Saved {saved_count} new notices")
+    print(f"Updated {updated_count} existing notices")
+    print(f"Skipped {skipped_count} notices due to errors")
+    print(f"Total processed: {saved_count + updated_count + skipped_count}/{len(notices)}")
+    
     return saved_count
 
 # Routes
@@ -531,7 +569,9 @@ if __name__ == '__main__':
     print("=" * 60)
     print("UFS Maritime Notices Tracker")
     print("=" * 60)
-    print("Starting server on http://127.0.0.1:5000")
+    print("Starting server on http://0.0.0.0:5000")
+    print("Access from this machine: http://127.0.0.1:5000")
+    print("Access from network: http://<your-ip>:5000")
     print("Press Ctrl+C to stop")
     print("=" * 60)
     
