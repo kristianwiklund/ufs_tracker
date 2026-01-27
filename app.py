@@ -200,50 +200,68 @@ def scrape_ufs_notices(sjokort_nummer=None, batsportkort=None, days_back=30):
             
             for idx, row in enumerate(rows):
                 cells = row.find_all('td')
+                print(f"\n{'='*60}")
                 print(f"Row {idx}: {len(cells)} cells")
                 
-                if len(cells) >= 4:  # Need at least 4 cells: notice_number, affected charts, date, title
-                    # Extract information from correct columns
-                    notice_number_text = cells[0].get_text(strip=True) if len(cells) > 0 else ''
-                    affected_charts = cells[1].get_text(strip=True) if len(cells) > 1 else ''
-                    published_date = cells[2].get_text(strip=True) if len(cells) > 2 else ''
-                    title = cells[3].get_text(strip=True) if len(cells) > 3 else ''
-                    
-                    print(f"  Notice number: {notice_number_text}")
-                    print(f"  Affected charts: {affected_charts[:50]}...")
-                    print(f"  Date: {published_date}")
-                    print(f"  Title: {title[:50]}...")
-                    
-                    # Clean up notice number - extract just the number
+                # Check for links in the entire row first
+                all_links = row.find_all('a')
+                print(f"  Found {len(all_links)} link(s) in row")
+                for link in all_links:
+                    href = link.get('href', '')
+                    text = link.get_text(strip=True)
+                    print(f"    Link: href='{href}' text='{text}'")
+                
+                # Print all cells to understand the structure
+                for cell_idx, cell in enumerate(cells):
+                    cell_text = cell.get_text(strip=True)
+                    print(f"  Cell {cell_idx}: '{cell_text}'")
+                    link = cell.find('a')
+                    if link:
+                        print(f"    -> Has link: href={link.get('href', 'no href')} text={link.get_text(strip=True)}")
+                
+                if len(cells) >= 3:
+                    # Extract notice number from link
                     notice_number = None
-                    if notice_number_text:
-                        # Try to extract number from text like "19811" or "UfS 19811"
-                        match = re.search(r'\d{4,6}', notice_number_text)
-                        if match:
-                            notice_number = match.group(0)
-                            print(f"  Extracted notice number: {notice_number}")
-                    
-                    # Try to get detail link from title cell for additional content
                     detail_url = None
-                    if notice_number:
-                        detail_url = f'https://ufs.sjofartsverket.se/Current/NoticeDetails?notice={notice_number}&from=search'
-                    else:
-                        # Try to find a link in any cell
-                        for cell in cells:
-                            link = cell.find('a')
-                            if link and link.get('href'):
-                                href = link.get('href')
-                                if 'notice=' in href:
-                                    try:
-                                        notice_number = href.split('notice=')[1].split('&')[0]
-                                        detail_url = f'https://ufs.sjofartsverket.se/Current/NoticeDetails?notice={notice_number}&from=search'
-                                        print(f"  Extracted notice number from link: {notice_number}")
-                                        break
-                                    except:
-                                        pass
+                    
+                    # Look for notice number in any link in the row
+                    for link in all_links:
+                        href = link.get('href', '')
+                        if 'notice=' in href:
+                            try:
+                                notice_number = href.split('notice=')[1].split('&')[0]
+                                detail_url = f'https://ufs.sjofartsverket.se/Current/NoticeDetails?notice={notice_number}&from=search'
+                                print(f"  ✓ Extracted notice number from link: {notice_number}")
+                                break
+                            except:
+                                pass
+                        elif 'NoticeDetails/' in href:
+                            try:
+                                notice_number = href.split('NoticeDetails/')[1].split('/')[0].split('?')[0]
+                                detail_url = f'https://ufs.sjofartsverket.se/Current/NoticeDetails?notice={notice_number}&from=search'
+                                print(f"  ✓ Extracted notice number from link path: {notice_number}")
+                                break
+                            except:
+                                pass
+                    
+                    # The actual structure based on your example:
+                    # Cell 0: affected charts (e.g., "612Bsp Stockholm N 2024/s39")
+                    # Cell 1: publication date (e.g., "2026-01-14")
+                    # Cell 2: title/description (e.g., "Stockholms skärgård...")
+                    # Cell 3: empty or additional info
+                    
+                    affected_charts = cells[0].get_text(strip=True) if len(cells) > 0 else ''
+                    published_date = cells[1].get_text(strip=True) if len(cells) > 1 else ''
+                    title = cells[2].get_text(strip=True) if len(cells) > 2 else ''
+                    
+                    print(f"  Final interpretation:")
+                    print(f"    Notice: {notice_number or 'NOT FOUND'}")
+                    print(f"    Charts: {affected_charts[:60]}...")
+                    print(f"    Date: {published_date}")
+                    print(f"    Title: {title[:60]}...")
                     
                     if not notice_number:
-                        print(f"  WARNING: Could not extract notice number for row {idx}")
+                        print(f"  ⚠️ WARNING: Could not extract notice number!")
                     
                     notice = {
                         'notice_number': notice_number or '',
@@ -270,9 +288,9 @@ def scrape_ufs_notices(sjokort_nummer=None, batsportkort=None, days_back=30):
                             pass
                     
                     notices.append(notice)
-                    print(f"  Added notice to list (total so far: {len(notices)})")
+                    print(f"  ✓ Added notice to list (total so far: {len(notices)})")
                 else:
-                    print(f"Row {idx}: Skipped - only {len(cells)} cells (need at least 4)")
+                    print(f"Row {idx}: Skipped - only {len(cells)} cells (need at least 3)")
         
         # Log what we found for debugging
         print(f"Scraped {len(notices)} notices from UFS")
