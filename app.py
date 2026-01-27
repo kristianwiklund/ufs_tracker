@@ -69,56 +69,81 @@ def get_db():
     conn.row_factory = sqlite3.Row
     return conn
 
+def get_batsportkort_id(chart_name):
+    """
+    Map båtsportkort chart names to their IDs used in the UFS search.
+    The IDs are used in the URL parameter SearchFormModel.SmallCraftChart
+    
+    Common chart mappings:
+    - Bsp Stockholm N 2024 -> 5231
+    - Bsp Stockholm M 2024 -> (need to find ID)
+    - etc.
+    
+    If the input is already a number, return it as-is.
+    Otherwise, try to extract or look up the ID.
+    """
+    # If it's already a number, return it
+    if chart_name.isdigit():
+        return chart_name
+    
+    # TODO: Build a complete mapping of chart names to IDs
+    # For now, this is a placeholder that users can expand
+    chart_id_map = {
+        'Bsp Stockholm N 2024': '5231',
+        'Bsp Stockholm M 2024': '5230',  # Example, needs verification
+    }
+    
+    # Try exact match first
+    if chart_name in chart_id_map:
+        return chart_id_map[chart_name]
+    
+    # Try case-insensitive match
+    for name, chart_id in chart_id_map.items():
+        if name.lower() == chart_name.lower():
+            return chart_id
+    
+    # If no match found, return the input as-is
+    # (user might be entering the ID directly)
+    return chart_name
+
 def scrape_ufs_notices(sjokort_nummer=None, batsportkort=None, days_back=30):
     """
     Scrape notices from UFS website
     Returns a list of notice dictionaries
     """
-    base_url = "https://ufs.sjofartsverket.se/notice/search/"
+    base_url = "https://ufs.sjofartsverket.se/Notice/Search/"
     
-    # Prepare form data
-    form_data = {}
-    
-    if sjokort_nummer:
-        form_data['Sjokort'] = sjokort_nummer
+    # Prepare query parameters (URL parameters, not form data)
+    params = {}
     
     if batsportkort:
-        form_data['Batsportkort'] = batsportkort
+        # For båtsportkort, convert name to ID if needed
+        chart_id = get_batsportkort_id(batsportkort)
+        params['SearchFormModel.SmallCraftChart'] = chart_id
     
-    # Set time period (last 30 days by default)
-    form_data['PublicationTime'] = '6'  # Last quarter
+    if sjokort_nummer:
+        # For sjökort (nautical charts)
+        params['SearchFormModel.Chart'] = sjokort_nummer
+    
+    # Set time period
+    # 0 = All time, 1 = Last week, 2 = Last month, etc.
+    params['SearchFormModel.SearchTimePeriod'] = '0'  # All time
     
     try:
-        # First request to get the form
+        # Make GET request with query parameters
         session = requests.Session()
-        response = session.get(base_url, timeout=10)
+        response = session.get(base_url, params=params, timeout=10)
         
         if response.status_code != 200:
             return {'error': f'Failed to access website: {response.status_code}'}
         
-        soup = BeautifulSoup(response.text, 'html.parser')
-        
-        # Extract form token if present
-        form = soup.find('form')
-        if form:
-            token_input = form.find('input', {'name': '__RequestVerificationToken'})
-            if token_input:
-                form_data['__RequestVerificationToken'] = token_input.get('value')
-        
-        # Submit search
-        #print(base_url,form_data)
-        search_response = session.post(base_url, data=form_data, timeout=10)
-        
-        if search_response.status_code != 200:
-            return {'error': f'Search failed: {search_response.status_code}'}
-        
         # Parse results
-        results_soup = BeautifulSoup(search_response.text, 'html.parser')
+        soup = BeautifulSoup(response.text, 'html.parser')
         
         notices = []
         
         # Find the results table
-        table = results_soup.find('table', {'class': 'table'}) or results_soup.find('table')
+        table = soup.find('table', {'class': 'table'}) or soup.find('table')
         
         if table:
             rows = table.find_all('tr')[1:]  # Skip header
@@ -391,4 +416,4 @@ if __name__ == '__main__':
     print("Press Ctrl+C to stop")
     print("=" * 60)
     
-    app.run(debug=True, host='0.0.0.0', port=7997)
+    app.run(debug=True, host='0.0.0.0', port=5000)

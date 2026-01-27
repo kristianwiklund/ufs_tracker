@@ -39,9 +39,23 @@ En standalone Python-webbapplikation för att skrapa, lagra och spåra implement
 1. Öppna startsidan
 2. Ange antingen:
    - **Sjökortnummer** (t.ex. 61, 522, 9221)
-   - **Båtsportkort** (välj från dropdown-menyn)
+   - **Båtsportkort** - Du kan ange antingen:
+     - Kartnamnet (t.ex. "Bsp Stockholm N 2024")
+     - Direkt kart-ID (t.ex. "5231")
 3. Klicka på "Sök och hämta notiser"
 4. Applikationen skrapar UFS-webbplatsen och sparar resultaten i databasen
+
+**OBS**: Applikationen använder nu samma sökning som UFS-webbplatsen:
+- URL-parametrar används istället för POST-formulär
+- För båtsportkort används `SearchFormModel.SmallCraftChart` med kart-ID
+- För sjökort används `SearchFormModel.Chart`
+- Exempel: `https://ufs.sjofartsverket.se/Notice/Search/?SearchFormModel.SmallCraftChart=5231`
+
+**Kända kart-ID för båtsportkort**:
+- Bsp Stockholm N 2024: 5231
+- Bsp Stockholm M 2024: 5230 (exempel, behöver verifieras)
+
+Om du vet fler kart-ID, kan du uppdatera `get_batsportkort_id()` funktionen i `app.py`.
 
 ### 2. Hantera notiser
 
