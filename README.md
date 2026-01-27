@@ -1,3 +1,12 @@
+ 
+Funkar nästan - mina tokens tog slut. 
+
+Vad behöver fixas:
+- Tracking per sjökort så man kan följa upp per kort vad som är rättat
+- Droplista för att välja kort på listsidan från de kort som är skrapade
+- Droplista genererad dynamiskt för att välja kort på söksidan
+
+
 # UFS Maritime Notices Tracker
 
 En standalone Python-webbapplikation för att skrapa, lagra och spåra implementering av underrättelser för sjöfarande från Sjöfartsverkets UFS-databas.
