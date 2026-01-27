@@ -6,8 +6,12 @@ Vad behöver fixas:
 - Droplista för att välja kort på listsidan från de kort som är skrapade
 - Droplista genererad dynamiskt för att välja kort på söksidan
 
+# Licens: MIT - Skyll dig själv om du går på grund på grund av att du litar på det här fulhacket...
 
-# UFS Maritime Notices Tracker
+
+# Dokumentation som Claude har genererat, ej kontrollerad över huvud taget:
+
+## UFS Maritime Notices Tracker
 
 En standalone Python-webbapplikation för att skrapa, lagra och spåra implementering av underrättelser för sjöfarande från Sjöfartsverkets UFS-databas.
 
