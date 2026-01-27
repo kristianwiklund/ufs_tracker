@@ -36,9 +36,13 @@ def init_db():
             area TEXT,
             content TEXT,
             url TEXT,
-            scraped_date TEXT,
-            UNIQUE(notice_number)
+            scraped_date TEXT
         )
+    ''')
+    
+    # Create an index on notice_number for faster lookups (but not unique to allow empty values)
+    c.execute('''
+        CREATE INDEX IF NOT EXISTS idx_notice_number ON notices(notice_number)
     ''')
     
     c.execute('''
@@ -318,17 +322,31 @@ def save_notices_to_db(notices):
             print(f"\nProcessing notice {idx + 1}/{len(notices)}: {notice.get('notice_number', 'NO NUMBER')} - {notice.get('title', '')[:50]}...")
             
             # Check if notice already exists
-            c.execute('SELECT id FROM notices WHERE notice_number = ? AND notice_number != ""', 
-                     (notice['notice_number'],))
-            existing = c.fetchone()
+            existing = None
+            if notice['notice_number'] and notice['notice_number'].strip():
+                # If we have a notice number, check by that
+                c.execute('SELECT id FROM notices WHERE notice_number = ?', 
+                         (notice['notice_number'],))
+                existing = c.fetchone()
+                print(f"  Checking for existing by notice_number={notice['notice_number']}: {'Found' if existing else 'Not found'}")
+            else:
+                # If no notice number, check by title and published date to avoid true duplicates
+                c.execute('''SELECT id FROM notices 
+                            WHERE title = ? AND published_date = ? 
+                            AND (notice_number = '' OR notice_number IS NULL)
+                            LIMIT 1''', 
+                         (notice['title'], notice['published_date']))
+                existing = c.fetchone()
+                print(f"  Checking for existing by title+date: {'Found' if existing else 'Not found'}")
             
-            if existing and notice['notice_number']:
+            if existing:
                 print(f"  Notice exists (id={existing['id']}), updating...")
                 # Update existing notice
                 c.execute('''
                     UPDATE notices 
                     SET title = ?, affected_charts = ?, published_date = ?, 
-                        content = ?, url = ?, scraped_date = ?
+                        content = ?, url = ?, scraped_date = ?,
+                        notice_number = ?
                     WHERE id = ?
                 ''', (
                     notice['title'],
@@ -337,6 +355,7 @@ def save_notices_to_db(notices):
                     notice.get('content', ''),
                     notice.get('url', ''),
                     scraped_date,
+                    notice['notice_number'],
                     existing['id']
                 ))
                 updated_count += 1
