@@ -21,6 +21,10 @@ app.config['DATABASE'] = 'ufs_notices.db'
 # Global debug flag
 DEBUG_MODE = False
 
+# Cache for chart mappings (expires after 1 hour)
+CHART_MAPPINGS_CACHE = {'data': None, 'timestamp': None}
+CACHE_DURATION = 3600  # 1 hour in seconds
+
 def debug_print(*args, **kwargs):
     """Print only if debug mode is enabled"""
     if DEBUG_MODE:
@@ -106,7 +110,20 @@ def get_chart_mappings():
     """
     Scrape the UFS search page to get the mappings between chart names/numbers and their IDs.
     Returns a tuple of (sjokort_map, batsportkort_map)
+    Cached for 1 hour to avoid repeated scraping.
     """
+    global CHART_MAPPINGS_CACHE
+    
+    # Check if cache is valid
+    import time
+    current_time = time.time()
+    if (CHART_MAPPINGS_CACHE['data'] is not None and 
+        CHART_MAPPINGS_CACHE['timestamp'] is not None and
+        current_time - CHART_MAPPINGS_CACHE['timestamp'] < CACHE_DURATION):
+        debug_print("Using cached chart mappings")
+        return CHART_MAPPINGS_CACHE['data']
+    
+    debug_print("Fetching fresh chart mappings from UFS website")
     search_url = "https://ufs.sjofartsverket.se/Notice/Search"
     
     try:
@@ -115,6 +132,7 @@ def get_chart_mappings():
         
         if response.status_code != 200:
             debug_print(f"Failed to fetch search page: {response.status_code}")
+            # Return empty maps if fetch fails
             return {}, {}
         
         soup = BeautifulSoup(response.text, 'html.parser')
@@ -147,10 +165,18 @@ def get_chart_mappings():
         else:
             debug_print("Could not find SearchFormModel_SmallCraftChart selector")
         
+        # Cache the results
+        CHART_MAPPINGS_CACHE['data'] = (sjokort_map, batsportkort_map)
+        CHART_MAPPINGS_CACHE['timestamp'] = current_time
+        
         return sjokort_map, batsportkort_map
     
     except Exception as e:
         debug_print(f"Error fetching chart mappings: {e}")
+        # Return cached data if available, even if expired
+        if CHART_MAPPINGS_CACHE['data'] is not None:
+            debug_print("Returning stale cached data due to error")
+            return CHART_MAPPINGS_CACHE['data']
         return {}, {}
 
 def get_batsportkort_id(chart_name, batsportkort_map):
@@ -207,6 +233,10 @@ def scrape_ufs_notices(sjokort_nummer=None, batsportkort=None, days_back=30):
     """
     base_url = "https://ufs.sjofartsverket.se/Notice/Search/"
     
+    # Validate inputs
+    if not sjokort_nummer and not batsportkort:
+        return {'error': 'Must specify either sjökort or båtsportkort'}
+    
     # First, get the chart mappings from the search page
     sjokort_map, batsportkort_map = get_chart_mappings()
     
@@ -217,11 +247,18 @@ def scrape_ufs_notices(sjokort_nummer=None, batsportkort=None, days_back=30):
         # For båtsportkort, convert name to ID using the scraped mapping
         chart_id = get_batsportkort_id(batsportkort, batsportkort_map)
         params['SearchFormModel.SmallCraftChart'] = chart_id
+        debug_print(f"Using båtsportkort ID: {chart_id}")
     
     if sjokort_nummer:
         # For sjökort (nautical charts), convert to ID using the scraped mapping
         chart_id = get_sjokort_id(sjokort_nummer, sjokort_map)
-        params['SearchFormModel.Chart'] = chart_id
+        # The form field is SearchFormModel.ChartNumbers (plural) not Chart
+        params['SearchFormModel.ChartNumbers'] = chart_id
+        debug_print(f"Using sjökort ID: {chart_id} with parameter SearchFormModel.ChartNumbers")
+    
+    # Verify we have at least one search parameter
+    if 'SearchFormModel.SmallCraftChart' not in params and 'SearchFormModel.ChartNumbers' not in params:
+        return {'error': 'Could not map chart name to ID'}
     
     # Set time period
     # 0 = All time, 1 = Last week, 2 = Last month, etc.
@@ -256,30 +293,50 @@ def scrape_ufs_notices(sjokort_nummer=None, batsportkort=None, days_back=30):
         # Find the specific table for "Notiser för gällande sjökort"
         # Look for a heading or caption that identifies this table
         table = None
+        table_source = None
         
         # Try to find by heading
         heading = soup.find(['h2', 'h3', 'h4'], string=re.compile(r'Notiser för gällande sjökort', re.IGNORECASE))
         if heading:
+            debug_print(f"Found heading: '{heading.get_text()}' ({heading.name})")
             # Find the next table after this heading
             table = heading.find_next('table')
+            if table:
+                table_source = "heading"
+                debug_print(f"Found table after heading")
         
         # If not found by heading, try to find by table caption
         if not table:
+            debug_print("No table found by heading, trying caption...")
             captions = soup.find_all('caption')
+            debug_print(f"Found {len(captions)} caption(s)")
             for caption in captions:
-                if re.search(r'Notiser för gällande sjökort', caption.get_text(), re.IGNORECASE):
+                caption_text = caption.get_text()
+                debug_print(f"  Caption: '{caption_text}'")
+                if re.search(r'Notiser för gällande sjökort', caption_text, re.IGNORECASE):
                     table = caption.find_parent('table')
+                    table_source = "caption"
+                    debug_print(f"Found table by caption")
                     break
         
         # If still not found, try finding the table by id or class that might indicate it's the main results
         if not table:
+            debug_print("No table found by heading or caption, trying by id/class...")
             table = soup.find('table', {'id': re.compile(r'notice|result', re.IGNORECASE)})
+            if table:
+                table_source = "id"
+                debug_print(f"Found table by id: {table.get('id')}")
         
         # Last resort: find first table with class 'table'
         if not table:
+            debug_print("Trying to find table by class='table'...")
             table = soup.find('table', {'class': 'table'})
+            if table:
+                table_source = "class"
+                debug_print(f"Found table by class")
         
         if not table:
+            debug_print("ERROR: No table found by any method!")
             # No table found - might be a different page structure or no results
             # Check if there's a "no results" message
             no_results = soup.find(string=re.compile(r'(inga|no).*(resultat|results)', re.IGNORECASE))
@@ -295,12 +352,20 @@ def scrape_ufs_notices(sjokort_nummer=None, batsportkort=None, days_back=30):
             
             # Return error with some debugging info
             return {'error': 'Could not find results table on page. The page structure may have changed.',
-                    'params': params}
+                    'params' : params}
+        
+        debug_print(f"Using table found by: {table_source}")
         
         if table:
             rows = table.find_all('tr')[1:]  # Skip header
             
             debug_print(f"Found table with {len(rows)} rows")
+            
+            # Safety limit to prevent hanging on huge result sets
+            MAX_ROWS = 500
+            if len(rows) > MAX_ROWS:
+                debug_print(f"WARNING: Found {len(rows)} rows, limiting to {MAX_ROWS}")
+                rows = rows[:MAX_ROWS]
             
             for idx, row in enumerate(rows):
                 cells = row.find_all('td')
