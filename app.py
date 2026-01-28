@@ -534,6 +534,55 @@ def index():
     """Main page"""
     return render_template('index.html')
 
+@app.route('/get_available_charts')
+def get_available_charts():
+    """Get list of all available charts from UFS website"""
+    sjokort_map, batsportkort_map = get_chart_mappings()
+    
+    # Combine both into a single list with type indicator
+    all_charts = []
+    
+    # Add sjökort
+    for name, chart_id in sjokort_map.items():
+        all_charts.append({
+            'id': chart_id,
+            'name': name,
+            'type': 'sjokort',
+            'display': f"Sjökort {name}"
+        })
+    
+    # Add båtsportkort
+    for name, chart_id in batsportkort_map.items():
+        all_charts.append({
+            'id': chart_id,
+            'name': name,
+            'type': 'batsportkort',
+            'display': name
+        })
+    
+    # Sort by display name
+    all_charts.sort(key=lambda x: x['display'])
+    
+    return jsonify(all_charts)
+
+@app.route('/get_tracked_charts')
+def get_tracked_charts():
+    """Get list of charts that have been searched/tracked"""
+    conn = get_db()
+    c = conn.cursor()
+    
+    c.execute('''
+        SELECT DISTINCT chart_identifier
+        FROM implementation_status
+        WHERE chart_identifier != ''
+        ORDER BY chart_identifier
+    ''')
+    
+    charts = [row[0] for row in c.fetchall()]
+    conn.close()
+    
+    return jsonify(charts)
+
 @app.route('/search', methods=['POST'])
 def search():
     """Handle search request"""
@@ -578,39 +627,32 @@ def list_notices():
     c = conn.cursor()
     
     # Get filter parameters
-    sjokort = request.args.get('sjokort', '')
-    batsportkort = request.args.get('batsportkort', '')
+    chart_identifier = request.args.get('chart_identifier', '')
     show_implemented = request.args.get('show_implemented', '1')
     
-    # Determine the chart identifier
-    chart_identifier = batsportkort or sjokort
-    
     if not chart_identifier:
-        # If no chart specified, show all notices without filtering
-        query = '''
-            SELECT DISTINCT n.id, n.notice_number, n.title, n.affected_charts, n.sjokort_nummer, n.batsportkort,
-                   n.published_date, n.content, n.url, n.scraped_date,
-                   NULL as implemented, NULL as implemented_date, NULL as notes
-            FROM notices n
-            ORDER BY n.published_date DESC
-        '''
-        params = []
-    else:
-        # Show notices for the specific chart with their implementation status
-        query = '''
-            SELECT n.id, n.notice_number, n.title, n.affected_charts, n.sjokort_nummer, n.batsportkort,
-                   n.published_date, n.content, n.url, n.scraped_date,
-                   i.implemented, i.implemented_date, i.notes, i.chart_identifier
-            FROM notices n
-            INNER JOIN implementation_status i ON n.id = i.notice_id
-            WHERE i.chart_identifier = ?
-        '''
-        params = [chart_identifier]
-        
-        if show_implemented == '0':
-            query += ' AND (i.implemented = 0 OR i.implemented IS NULL)'
-        
-        query += ' ORDER BY n.published_date DESC'
+        # If no chart specified, show empty page with message
+        conn.close()
+        return render_template('notices.html', 
+                             notices=[], 
+                             chart_identifier='',
+                             show_implemented=show_implemented)
+    
+    # Show notices for the specific chart with their implementation status
+    query = '''
+        SELECT n.id, n.notice_number, n.title, n.affected_charts, n.sjokort_nummer, n.batsportkort,
+               n.published_date, n.content, n.url, n.scraped_date,
+               i.implemented, i.implemented_date, i.notes, i.chart_identifier
+        FROM notices n
+        INNER JOIN implementation_status i ON n.id = i.notice_id
+        WHERE i.chart_identifier = ?
+    '''
+    params = [chart_identifier]
+    
+    if show_implemented == '0':
+        query += ' AND (i.implemented = 0 OR i.implemented IS NULL)'
+    
+    query += ' ORDER BY n.published_date DESC'
     
     c.execute(query, params)
     notices = c.fetchall()
@@ -618,7 +660,7 @@ def list_notices():
     conn.close()
     
     return render_template('notices.html', notices=notices, 
-                         sjokort=sjokort, batsportkort=batsportkort,
+                         chart_identifier=chart_identifier,
                          show_implemented=show_implemented)
 
 @app.route('/update_status/<int:notice_id>', methods=['POST'])

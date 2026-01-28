@@ -250,34 +250,13 @@
             
             <div class="search-section">
                 <h2>🔍 Sök efter notiser</h2>
-                <p style="margin-bottom: 20px; color: #666;">Ange antingen sjökortnummer eller båtsportkort för att söka efter relevanta underrättelser.</p>
+                <p style="margin-bottom: 20px; color: #666;">Välj ett sjökort eller båtsportkort för att söka efter relevanta underrättelser.</p>
                 
                 <form id="searchForm">
                     <div class="form-group">
-                        <label for="sjokort_nummer">Sjökortnummer</label>
-                        <input type="text" id="sjokort_nummer" name="sjokort_nummer" 
-                               placeholder="t.ex. 61, 522, 9221">
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="batsportkort">Båtsportkort</label>
-                        <select id="batsportkort" name="batsportkort">
-                            <option value="">-- Välj båtsportkort --</option>
-                            <option value="Bsp Bottenhavet N 2024">Bsp Bottenhavet N 2024</option>
-                            <option value="Bsp Bottenhavet S 2023">Bsp Bottenhavet S 2023</option>
-                            <option value="Bsp Bottenviken 2023">Bsp Bottenviken 2023</option>
-                            <option value="Bsp Göta Kanal 2022">Bsp Göta Kanal 2022</option>
-                            <option value="Bsp Hanöbukten 2022">Bsp Hanöbukten 2022</option>
-                            <option value="Bsp Kalmarsund 2023">Bsp Kalmarsund 2023</option>
-                            <option value="Bsp Mälaren - Hjälmaren 2024">Bsp Mälaren - Hjälmaren 2024</option>
-                            <option value="Bsp Ostkusten 2025">Bsp Ostkusten 2025</option>
-                            <option value="Bsp Stockholm M 2024">Bsp Stockholm M 2024</option>
-                            <option value="Bsp Stockholm N 2024">Bsp Stockholm N 2024</option>
-                            <option value="Bsp Stockholm S 2024">Bsp Stockholm S 2024</option>
-                            <option value="BSP Sydkusten 2025">BSP Sydkusten 2025</option>
-                            <option value="Bsp Vänern 2022">Bsp Vänern 2022</option>
-                            <option value="BSP Västkusten N 2025">BSP Västkusten N 2025</option>
-                            <option value="Bsp Västkusten S 2025">Bsp Västkusten S 2025</option>
+                        <label for="chart_select">Välj sjökort eller båtsportkort</label>
+                        <select id="chart_select" name="chart_select" required>
+                            <option value="">-- Laddar tillgängliga kort... --</option>
                         </select>
                     </div>
                     
@@ -309,20 +288,50 @@
     </div>
     
     <script>
+        // Load available charts when page loads
+        async function loadCharts() {
+            try {
+                const response = await fetch('/get_available_charts');
+                const charts = await response.json();
+                
+                const select = document.getElementById('chart_select');
+                select.innerHTML = '<option value="">-- Välj ett kort --</option>';
+                
+                charts.forEach(chart => {
+                    const option = document.createElement('option');
+                    option.value = JSON.stringify({name: chart.name, type: chart.type});
+                    option.textContent = chart.display;
+                    select.appendChild(option);
+                });
+            } catch (error) {
+                console.error('Error loading charts:', error);
+                const select = document.getElementById('chart_select');
+                select.innerHTML = '<option value="">Fel vid laddning av kort</option>';
+            }
+        }
+        
+        // Load charts on page load
+        loadCharts();
+        
         document.getElementById('searchForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             
-            const sjokort = document.getElementById('sjokort_nummer').value.trim();
-            const batsportkort = document.getElementById('batsportkort').value;
+            const chartSelectValue = document.getElementById('chart_select').value;
             
-            if (!sjokort && !batsportkort) {
-                showMessage('Vänligen ange antingen sjökortnummer eller båtsportkort', 'error');
+            if (!chartSelectValue) {
+                showMessage('Vänligen välj ett sjökort eller båtsportkort', 'error');
                 return;
             }
             
+            // Parse the selected chart info
+            const chartInfo = JSON.parse(chartSelectValue);
+            
             const formData = new FormData();
-            if (sjokort) formData.append('sjokort_nummer', sjokort);
-            if (batsportkort) formData.append('batsportkort', batsportkort);
+            if (chartInfo.type === 'sjokort') {
+                formData.append('sjokort_nummer', chartInfo.name);
+            } else {
+                formData.append('batsportkort', chartInfo.name);
+            }
             
             document.getElementById('loading').style.display = 'block';
             document.getElementById('message').style.display = 'none';
@@ -342,8 +351,7 @@
                 } else {
                     showMessage(data.message, 'success');
                     setTimeout(() => {
-                        window.location.href = '/notices?sjokort=' + (sjokort || '') + 
-                                              '&batsportkort=' + (batsportkort || '');
+                        window.location.href = '/notices?chart_identifier=' + encodeURIComponent(chartInfo.name);
                     }, 2000);
                 }
             } catch (error) {

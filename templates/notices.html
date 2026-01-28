@@ -290,16 +290,11 @@
                 <form method="get" action="/notices">
                     <div class="filter-group">
                         <label>
-                            Sjökortnummer:
-                            <input type="text" name="sjokort" value="{{ sjokort }}" 
-                                   placeholder="t.ex. 61" style="padding: 5px; border: 1px solid #ddd; border-radius: 3px;">
-                        </label>
-                        
-                        <label>
-                            Båtsportkort:
-                            <input type="text" name="batsportkort" value="{{ batsportkort }}" 
-                                   placeholder="t.ex. Bsp Stockholm N 2024" 
-                                   style="padding: 5px; border: 1px solid #ddd; border-radius: 3px; min-width: 200px;">
+                            Välj sjökort/båtsportkort:
+                            <select name="chart_identifier" id="chart_identifier" required
+                                    style="padding: 8px; border: 1px solid #ddd; border-radius: 3px; min-width: 250px;">
+                                <option value="">-- Välj ett kort --</option>
+                            </select>
                         </label>
                         
                         <label>
@@ -314,6 +309,10 @@
                         </button>
                     </div>
                 </form>
+                
+                <p id="no-chart-warning" style="margin-top: 15px; color: #ff9800; display: none;">
+                    ⚠️ Välj ett kort för att kunna markera notiser som implementerade.
+                </p>
             </div>
             
             {% if notices %}
@@ -429,7 +428,55 @@
     <script>
         // Get the current chart identifier from the URL parameters
         const urlParams = new URLSearchParams(window.location.search);
-        const chartIdentifier = urlParams.get('batsportkort') || urlParams.get('sjokort') || '';
+        const chartIdentifier = urlParams.get('chart_identifier') || '';
+        
+        // Load tracked charts when page loads
+        async function loadTrackedCharts() {
+            try {
+                const response = await fetch('/get_tracked_charts');
+                const charts = await response.json();
+                
+                const select = document.getElementById('chart_identifier');
+                select.innerHTML = '<option value="">-- Välj ett kort --</option>';
+                
+                charts.forEach(chart => {
+                    const option = document.createElement('option');
+                    option.value = chart;
+                    option.textContent = chart;
+                    if (chart === chartIdentifier) {
+                        option.selected = true;
+                    }
+                    select.appendChild(option);
+                });
+                
+                // Show warning and disable checkboxes if no chart selected
+                if (!chartIdentifier) {
+                    document.getElementById('no-chart-warning').style.display = 'block';
+                    disableAllCheckboxes();
+                }
+            } catch (error) {
+                console.error('Error loading tracked charts:', error);
+            }
+        }
+        
+        function disableAllCheckboxes() {
+            // Disable all implementation checkboxes and notes inputs
+            const checkboxes = document.querySelectorAll('input[type="checkbox"][id^="implemented_"]');
+            const notesInputs = document.querySelectorAll('input[id^="notes_"]');
+            
+            checkboxes.forEach(cb => {
+                cb.disabled = true;
+                cb.title = 'Välj ett kort för att kunna markera som implementerad';
+            });
+            
+            notesInputs.forEach(input => {
+                input.disabled = true;
+                input.placeholder = 'Välj ett kort för att kunna lägga till anteckningar';
+            });
+        }
+        
+        // Load tracked charts on page load
+        loadTrackedCharts();
         
         async function updateStatus(noticeId, implemented) {
             const notesInput = document.getElementById('notes_' + noticeId);
