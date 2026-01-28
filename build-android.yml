@@ -1,0 +1,129 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ main, master ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          git \
+          ffmpeg \
+          libsdl2-dev \
+          libsdl2-image-dev \
+          libsdl2-mixer-dev \
+          libsdl2-ttf-dev \
+          libportmidi-dev \
+          libswscale-dev \
+          libavformat-dev \
+          libavcodec-dev \
+          zlib1g-dev \
+          libgstreamer1.0 \
+          gstreamer1.0-plugins-base \
+          gstreamer1.0-plugins-good \
+          openjdk-17-jdk \
+          unzip
+    
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install buildozer cython
+    
+    - name: Create Android wrapper
+      run: |
+        cat > main.py << 'EOF'
+        """
+        Android wrapper for UFS Maritime Notices Tracker
+        Runs Flask app in background and opens browser to localhost
+        """
+        from kivy.app import App
+        from kivy.uix.webview import WebView
+        from kivy.clock import Clock
+        import threading
+        import time
+        
+        # Import the Flask app
+        import sys
+        import os
+        sys.path.insert(0, os.path.dirname(__file__))
+        from app import app as flask_app
+        
+        class UFSTrackerApp(App):
+            def build(self):
+                # Start Flask in background thread
+                threading.Thread(target=self.run_flask, daemon=True).start()
+                
+                # Wait a moment for Flask to start
+                time.sleep(2)
+                
+                # Create WebView
+                self.webview = WebView(url='http://127.0.0.1:5000')
+                return self.webview
+            
+            def run_flask(self):
+                flask_app.run(host='127.0.0.1', port=5000, debug=False)
+        
+        if __name__ == '__main__':
+            UFSTrackerApp().run()
+        EOF
+    
+    - name: Create buildozer.spec
+      run: |
+        cat > buildozer.spec << 'EOF'
+        [app]
+        title = UFS Tracker
+        package.name = ufstracker
+        package.domain = se.sjofartsverket
+        source.dir = .
+        source.include_exts = py,png,jpg,kv,atlas,html,css,js
+        version = 1.0.0
+        requirements = python3,kivy,flask,requests,beautifulsoup4
+        orientation = portrait
+        fullscreen = 0
+        android.permissions = INTERNET
+        android.api = 31
+        android.minapi = 21
+        android.ndk = 25b
+        android.accept_sdk_license = True
+        
+        [buildozer]
+        log_level = 2
+        warn_on_root = 1
+        EOF
+    
+    - name: Build APK with Buildozer
+      run: |
+        buildozer android debug
+    
+    - name: Upload APK artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: UFS-Tracker-Android
+        path: bin/*.apk
+    
+    - name: Create Release
+      if: startsWith(github.ref, 'refs/tags/v')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: bin/*.apk
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

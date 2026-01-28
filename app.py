@@ -352,7 +352,7 @@ def scrape_ufs_notices(sjokort_nummer=None, batsportkort=None, days_back=30):
             
             # Return error with some debugging info
             return {'error': 'Could not find results table on page. The page structure may have changed.',
-                    'params' : params}
+                    'params': params}
         
         debug_print(f"Using table found by: {table_source}")
         

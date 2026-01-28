@@ -1,0 +1,70 @@
+name: Build Windows Executable
+
+on:
+  push:
+    branches: [ main, master ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+    
+    - name: Build Windows executable
+      run: |
+        pyinstaller --name=UFS-Tracker ^
+          --onefile ^
+          --windowed ^
+          --add-data "templates;templates" ^
+          --icon=icon.ico ^
+          --hidden-import=flask ^
+          --hidden-import=requests ^
+          --hidden-import=bs4 ^
+          --hidden-import=sqlite3 ^
+          app.py
+    
+    - name: Create portable package
+      run: |
+        mkdir UFS-Tracker-Windows
+        copy dist\UFS-Tracker.exe UFS-Tracker-Windows\
+        copy README.md UFS-Tracker-Windows\
+        copy USER_GUIDE.md UFS-Tracker-Windows\
+        echo @echo off > UFS-Tracker-Windows\start.bat
+        echo echo Starting UFS Maritime Notices Tracker... >> UFS-Tracker-Windows\start.bat
+        echo start http://127.0.0.1:5000 >> UFS-Tracker-Windows\start.bat
+        echo UFS-Tracker.exe >> UFS-Tracker-Windows\start.bat
+    
+    - name: Create ZIP archive
+      run: |
+        powershell Compress-Archive -Path UFS-Tracker-Windows -DestinationPath UFS-Tracker-Windows.zip
+    
+    - name: Upload artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: UFS-Tracker-Windows
+        path: UFS-Tracker-Windows.zip
+    
+    - name: Create Release
+      if: startsWith(github.ref, 'refs/tags/v')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: UFS-Tracker-Windows.zip
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
