@@ -287,28 +287,21 @@
         <div class="content">
             <div class="filter-section">
                 <h3>🔍 Filter</h3>
-                <form method="get" action="/notices">
-                    <div class="filter-group">
-                        <label>
-                            Välj sjökort/båtsportkort:
-                            <select name="chart_identifier" id="chart_identifier" required
-                                    style="padding: 8px; border: 1px solid #ddd; border-radius: 3px; min-width: 250px;">
-                                <option value="">-- Välj ett kort --</option>
-                            </select>
-                        </label>
-                        
-                        <label>
-                            <input type="checkbox" name="show_implemented" value="1" 
-                                   {% if show_implemented == '1' %}checked{% endif %}>
-                            Visa implementerade
-                        </label>
-                        
-                        <button type="submit" style="background: #667eea; color: white; border: none; 
-                                padding: 8px 20px; border-radius: 5px; cursor: pointer;">
-                            Filtrera
-                        </button>
-                    </div>
-                </form>
+                <div class="filter-group">
+                    <label>
+                        Välj sjökort/båtsportkort:
+                        <select name="chart_identifier" id="chart_identifier" required
+                                style="padding: 8px; border: 1px solid #ddd; border-radius: 3px; min-width: 250px;">
+                            <option value="">-- Välj ett kort --</option>
+                        </select>
+                    </label>
+                    
+                    <label>
+                        <input type="checkbox" name="show_implemented" id="show_implemented" value="1" 
+                               {% if show_implemented == '1' %}checked{% endif %}>
+                        Visa implementerade
+                    </label>
+                </div>
                 
                 <p id="no-chart-warning" style="margin-top: 15px; color: #ff9800; display: none;">
                     ⚠️ Välj ett kort för att kunna markera notiser som implementerade.
@@ -477,6 +470,27 @@
         
         // Load tracked charts on page load
         loadTrackedCharts();
+        
+        // Auto-reload when chart selection changes
+        document.getElementById('chart_identifier').addEventListener('change', function() {
+            const selectedChart = this.value;
+            if (selectedChart) {
+                // Get current show_implemented value
+                const showImplemented = document.querySelector('input[name="show_implemented"]').checked ? '1' : '0';
+                // Redirect to the selected chart
+                window.location.href = '/notices?chart_identifier=' + encodeURIComponent(selectedChart) + 
+                                      '&show_implemented=' + showImplemented;
+            }
+        });
+        
+        // Auto-reload when show_implemented checkbox changes (only if chart is selected)
+        document.getElementById('show_implemented').addEventListener('change', function() {
+            if (chartIdentifier) {
+                const showImplemented = this.checked ? '1' : '0';
+                window.location.href = '/notices?chart_identifier=' + encodeURIComponent(chartIdentifier) + 
+                                      '&show_implemented=' + showImplemented;
+            }
+        });
         
         async function updateStatus(noticeId, implemented) {
             const notesInput = document.getElementById('notes_' + noticeId);
