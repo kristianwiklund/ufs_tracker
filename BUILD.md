@@ -234,7 +234,14 @@ The project includes GitHub Actions workflows that automatically build releases 
 ### Available Workflows
 
 - **build-windows.yml** - Builds Windows executable on every push
+  - Uses `actions/checkout@v4`, `actions/setup-python@v5`, `actions/upload-artifact@v4`
+  - Uses `softprops/action-gh-release@v2` for releases
+  
 - **build-android.yml** - Builds Android APK (requires Kivy setup)
+  - Uses updated actions (v4/v5)
+  - Complex build process, may take 30-60 minutes
+
+**Note:** The workflows use the latest stable versions of GitHub Actions to avoid deprecation warnings.
 
 ### Downloading Artifacts
 
