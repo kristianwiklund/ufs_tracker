@@ -1,3 +1,5 @@
+Claude skrev denna text, den är inte kontrollerad över huvud taget. 
+
 # UFS Maritime Notices Tracker
 
 En standalone Python-webbapplikation för att skrapa, lagra och spåra implementering av underrättelser för sjöfarande från Sjöfartsverkets UFS-databas.
@@ -260,7 +262,7 @@ Möjliga tillägg:
 
 ## Licens
 
-Denna applikation är skapad för privat och professionell användning. Data från Sjöfartsverkets UFS-databas är offentlig information.
+MIT license. 
 
 ## Support
 
