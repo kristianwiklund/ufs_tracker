@@ -158,6 +158,60 @@ Expected workflow duration:
 
 ## Troubleshooting
 
+### "Resource not accessible by integration" Error (403)
+
+**Cause**: GitHub Actions doesn't have permission to create releases.
+
+**Solution 1 - Workflow Permissions (Already Fixed)**:
+The workflow files now include the required permissions:
+```yaml
+permissions:
+  contents: write
+  discussions: write
+```
+
+**Solution 2 - Repository Settings**:
+If the error persists, you need to update repository settings:
+
+1. Go to your repository on GitHub
+2. Click **Settings** (tab at top)
+3. In left sidebar, click **Actions** → **General**
+4. Scroll down to **Workflow permissions**
+5. Select **Read and write permissions** (instead of "Read repository contents and packages permissions")
+6. Check the box: **Allow GitHub Actions to create and approve pull requests**
+7. Click **Save**
+
+**Solution 3 - Use Personal Access Token (PAT)**:
+If the above doesn't work, create a PAT:
+
+1. Go to GitHub Settings (your user settings, not repo)
+2. Developer settings → Personal access tokens → Tokens (classic)
+3. Generate new token (classic)
+4. Give it a name: "UFS Tracker Releases"
+5. Set expiration (e.g., 90 days)
+6. Select scopes:
+   - ✅ `repo` (full control)
+   - ✅ `write:packages`
+7. Generate token and copy it
+8. Go to your repository Settings → Secrets and variables → Actions
+9. Click "New repository secret"
+10. Name: `RELEASE_TOKEN`
+11. Value: paste your token
+12. Click "Add secret"
+13. Update workflow to use it:
+    ```yaml
+    env:
+      GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+    ```
+
+**Solution 4 - Organization Permissions**:
+If your repository is in an organization:
+
+1. Go to Organization Settings
+2. Actions → General
+3. Under "Workflow permissions", select "Read and write permissions"
+4. Save changes
+
 ### "Tag already exists" Error
 
 **Cause**: You're trying to create a tag that already exists.
