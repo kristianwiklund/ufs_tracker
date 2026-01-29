@@ -114,6 +114,22 @@
             margin: 0 auto;
         }
         
+        .chart-link {
+            color: #667eea;
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.2s;
+        }
+        
+        .chart-link:hover {
+            text-decoration: underline;
+            color: #764ba2;
+        }
+        
+        .chart-not-tracked {
+            color: #999;
+        }
+        
         .content {
             padding: 40px;
         }
@@ -528,8 +544,104 @@
             });
         }
         
+        // Make affected charts clickable
+        let trackedChartsList = [];
+        
+        async function makeAffectedChartsClickable() {
+            // Get list of tracked charts
+            try {
+                const response = await fetch('/get_tracked_charts');
+                trackedChartsList = await response.json();
+            } catch (error) {
+                console.error('Error fetching tracked charts:', error);
+                return;
+            }
+            
+            // Find all affected charts spans
+            const affectedChartsElements = document.querySelectorAll('.notice-card strong');
+            
+            affectedChartsElements.forEach(strong => {
+                if (strong.textContent.trim() === 'Berörda kort:') {
+                    const span = strong.nextElementSibling;
+                    if (span && span.tagName === 'SPAN') {
+                        const affectedChartsText = span.textContent;
+                        processAffectedCharts(span, affectedChartsText);
+                    }
+                }
+            });
+        }
+        
+        function processAffectedCharts(span, text) {
+            // Split by comma to get individual chart references
+            const chartRefs = text.split(',').map(s => s.trim()).filter(s => s);
+            
+            // Clear the span
+            span.innerHTML = '';
+            
+            chartRefs.forEach((chartRef, index) => {
+                // Try to extract chart identifier
+                // Format examples: "612Bsp Stockholm N 2024/s39", "621", "Bsp Stockholm S 2024"
+                const chartIdentifier = extractChartIdentifier(chartRef);
+                
+                // Check if this chart is tracked
+                const isTracked = trackedChartsList.includes(chartIdentifier);
+                
+                if (isTracked) {
+                    // Create clickable link
+                    const link = document.createElement('a');
+                    link.href = '#';
+                    link.className = 'chart-link';
+                    link.textContent = chartRef;
+                    link.onclick = function(e) {
+                        e.preventDefault();
+                        navigateToChart(chartIdentifier);
+                    };
+                    span.appendChild(link);
+                } else {
+                    // Create plain text with muted styling
+                    const textNode = document.createElement('span');
+                    textNode.className = 'chart-not-tracked';
+                    textNode.textContent = chartRef;
+                    span.appendChild(textNode);
+                }
+                
+                // Add comma separator except for last item
+                if (index < chartRefs.length - 1) {
+                    span.appendChild(document.createTextNode(', '));
+                }
+            });
+        }
+        
+        function extractChartIdentifier(chartRef) {
+            // Remove trailing reference like "/s39"
+            let cleaned = chartRef.split('/')[0].trim();
+            
+            // Try to match different patterns
+            // Pattern 1: "612Bsp Stockholm N 2024" -> extract "Bsp Stockholm N 2024"
+            const bspMatch = cleaned.match(/\d*(Bsp[^,]+)/i);
+            if (bspMatch) {
+                return bspMatch[1].trim();
+            }
+            
+            // Pattern 2: Just a number like "621" -> "sjökort 621"
+            if (/^\d+$/.test(cleaned)) {
+                return cleaned;
+            }
+            
+            // Pattern 3: Already a chart name
+            return cleaned;
+        }
+        
+        function navigateToChart(chartIdentifier) {
+            const showImplemented = document.querySelector('input[name="show_implemented"]').checked ? '1' : '0';
+            window.location.href = `/notices?chart_identifier=${encodeURIComponent(chartIdentifier)}&show_implemented=${showImplemented}`;
+        }
+        
         // Load tracked charts on page load
-        loadTrackedCharts();
+        loadTrackedCharts().then(() => {
+            // After tracked charts are loaded, make affected charts clickable
+            makeAffectedChartsClickable();
+        });
         
         // Auto-reload when chart selection changes
         document.getElementById('chart_identifier').addEventListener('change', function() {
