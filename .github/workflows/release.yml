@@ -1,0 +1,195 @@
+name: Create Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version number (e.g., v1.0.0)'
+        required: true
+        type: string
+      prerelease:
+        description: 'Mark as pre-release'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Validate version format
+      run: |
+        if [[ ! "${{ inputs.version }}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          echo "Error: Version must be in format v1.0.0"
+          exit 1
+        fi
+    
+    - name: Check if tag exists
+      run: |
+        if git rev-parse "${{ inputs.version }}" >/dev/null 2>&1; then
+          echo "Error: Tag ${{ inputs.version }} already exists"
+          exit 1
+        fi
+    
+    - name: Create and push tag
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git tag -a ${{ inputs.version }} -m "Release ${{ inputs.version }}"
+        git push origin ${{ inputs.version }}
+    
+    - name: Wait for builds to trigger
+      run: |
+        echo "Waiting for build workflows to trigger..."
+        sleep 10
+
+  build-windows:
+    needs: create-release
+    runs-on: windows-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        ref: ${{ inputs.version }}
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+    
+    - name: Build Console executable
+      run: |
+        pyinstaller --name=UFS-Tracker-Console --onefile --console --add-data "templates;templates" --hidden-import=flask --hidden-import=requests --hidden-import=bs4 --hidden-import=sqlite3 app.py
+    
+    - name: Build Desktop GUI executable
+      run: |
+        pyinstaller --name=UFS-Tracker --onefile --noconsole --add-data "templates;templates" --hidden-import=flask --hidden-import=requests --hidden-import=bs4 --hidden-import=sqlite3 --hidden-import=webview --collect-all=webview desktop_app.py
+    
+    - name: Create portable package
+      run: |
+        mkdir UFS-Tracker-Windows
+        copy dist\UFS-Tracker.exe UFS-Tracker-Windows\
+        copy dist\UFS-Tracker-Console.exe UFS-Tracker-Windows\
+        copy README.md UFS-Tracker-Windows\
+        copy USER_GUIDE.md UFS-Tracker-Windows\
+        
+        echo @echo off > UFS-Tracker-Windows\start.bat
+        echo echo Starting UFS Maritime Notices Tracker (Desktop App)... >> UFS-Tracker-Windows\start.bat
+        echo UFS-Tracker.exe >> UFS-Tracker-Windows\start.bat
+        
+        echo @echo off > UFS-Tracker-Windows\start-console.bat
+        echo echo Starting UFS Maritime Notices Tracker (Browser mode)... >> UFS-Tracker-Windows\start-console.bat
+        echo start http://127.0.0.1:5000 >> UFS-Tracker-Windows\start-console.bat
+        echo UFS-Tracker-Console.exe >> UFS-Tracker-Windows\start-console.bat
+        
+        echo UFS Maritime Notices Tracker - Windows Package > UFS-Tracker-Windows\README-PACKAGE.txt
+        echo. >> UFS-Tracker-Windows\README-PACKAGE.txt
+        echo Desktop App (Recommended): Double-click start.bat >> UFS-Tracker-Windows\README-PACKAGE.txt
+        echo Browser Mode: Double-click start-console.bat >> UFS-Tracker-Windows\README-PACKAGE.txt
+      shell: cmd
+    
+    - name: Create ZIP archive
+      run: |
+        powershell Compress-Archive -Path UFS-Tracker-Windows -DestinationPath UFS-Tracker-Windows-${{ inputs.version }}.zip
+    
+    - name: Upload Windows build
+      uses: actions/upload-artifact@v4
+      with:
+        name: windows-build
+        path: UFS-Tracker-Windows-${{ inputs.version }}.zip
+
+  publish-release:
+    needs: build-windows
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        ref: ${{ inputs.version }}
+    
+    - name: Download Windows build
+      uses: actions/download-artifact@v4
+      with:
+        name: windows-build
+    
+    - name: Generate release notes
+      id: release_notes
+      run: |
+        cat > release_notes.md << 'EOF'
+        # UFS Maritime Notices Tracker ${{ inputs.version }}
+        
+        ## Installation
+        
+        ### Windows
+        1. Download `UFS-Tracker-Windows-${{ inputs.version }}.zip`
+        2. Extract the ZIP file
+        3. Run `start.bat` for Desktop App (recommended) or `start-console.bat` for Browser mode
+        
+        **No Python installation required!**
+        
+        ## What's Included
+        
+        - **Desktop Application** (UFS-Tracker.exe) - Native window, no browser needed
+        - **Console Application** (UFS-Tracker-Console.exe) - Opens in browser
+        - Complete documentation (README.md, USER_GUIDE.md)
+        
+        ## Features
+        
+        - 🖥️ Desktop mode with native window
+        - 🔍 Search maritime notices from Swedish Maritime Administration
+        - ✅ Track implementation status per chart
+        - 📊 Statistics and progress tracking
+        - 💾 SQLite database for persistence
+        
+        ## System Requirements
+        
+        - **Windows**: Windows 10 or later (64-bit)
+        - **Memory**: 2 GB RAM minimum
+        - **Disk**: 50 MB free space
+        
+        ## Links
+        
+        - [GitHub Repository](https://github.com/kristianwiklund/ufs_tracker)
+        - [Report Issues](https://github.com/kristianwiklund/ufs_tracker/issues)
+        
+        ---
+        
+        © 2026 Kristian Wiklund | MIT License
+        EOF
+        
+        echo "notes_file=release_notes.md" >> $GITHUB_OUTPUT
+    
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ inputs.version }}
+        name: Release ${{ inputs.version }}
+        body_path: release_notes.md
+        draft: false
+        prerelease: ${{ inputs.prerelease }}
+        files: |
+          UFS-Tracker-Windows-${{ inputs.version }}.zip
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Publish release summary
+      run: |
+        echo "## Release Published! 🎉" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Version**: ${{ inputs.version }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Pre-release**: ${{ inputs.prerelease }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Download Links" >> $GITHUB_STEP_SUMMARY
+        echo "- [Windows Package](https://github.com/${{ github.repository }}/releases/download/${{ inputs.version }}/UFS-Tracker-Windows-${{ inputs.version }}.zip)" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Release Page" >> $GITHUB_STEP_SUMMARY
+        echo "[View Release](https://github.com/${{ github.repository }}/releases/tag/${{ inputs.version }})" >> $GITHUB_STEP_SUMMARY
