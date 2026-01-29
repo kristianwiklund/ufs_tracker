@@ -1,10 +1,14 @@
 # UFS Maritime Notices Tracker - Complete Recreation Prompt
 
-This document contains the complete specification to recreate the UFS Maritime Notices Tracker web application from scratch.
+This document contains the complete specification to recreate the UFS Maritime Notices Tracker web application from scratch, including both web-based and standalone desktop versions.
 
 ## Project Overview
 
-Create a standalone Python Flask web application that scrapes, stores, and tracks maritime notices (Underrättelser för sjöfarande) from the Swedish Maritime Administration's UFS database at https://ufs.sjofartsverket.se/Notice/Search/.
+Create a Python Flask web application with optional desktop GUI that scrapes, stores, and tracks maritime notices (Underrättelser för sjöfarande) from the Swedish Maritime Administration's UFS database at https://ufs.sjofartsverket.se/Notice/Search/.
+
+The application can run in two modes:
+1. **Web Mode**: Flask server accessed via web browser (python app.py)
+2. **Desktop Mode**: Native desktop application using pywebview (python desktop_app.py)
 
 ## Core Requirements
 
@@ -13,7 +17,9 @@ Create a standalone Python Flask web application that scrapes, stores, and track
 - **Database**: SQLite for persistent storage
 - **Web Scraping**: Requests + BeautifulSoup4
 - **Frontend**: Pure HTML, CSS, and JavaScript (no external dependencies)
-- **Server**: Listen on 0.0.0.0:5000
+- **Desktop GUI**: pywebview for standalone desktop application
+- **Server**: Listen on 127.0.0.1:5000 (localhost only for security)
+- **Build Tool**: PyInstaller for creating standalone executables
 
 ### 2. Key Features
 
@@ -300,33 +306,173 @@ python app.py "$@"
 ```
 .
 ├── app.py                      # Main Flask application
-├── requirements.txt            # Python dependencies
-├── start.sh                    # Startup script
+├── desktop_app.py              # Desktop GUI wrapper using pywebview
+├── requirements.txt            # Python dependencies (includes pywebview)
+├── start.sh                    # Startup script (Linux/Mac)
+├── build-windows.bat           # Build script for Windows executables
+├── build-linux.sh              # Build script for Linux executables
 ├── README.md                   # Swedish documentation
 ├── USER_GUIDE.md              # Swedish user guide
+├── BUILD.md                    # Build instructions
+├── RECREATION_PROMPT.md       # This file
 ├── ufs_notices.db             # SQLite database (created automatically)
+├── .github/
+│   └── workflows/
+│       ├── build-windows.yml  # GitHub Actions Windows build
+│       └── build-android.yml  # GitHub Actions Android build
 ├── templates/
 │   ├── index.html             # Search page
 │   ├── notices.html           # Notice list page
 │   └── statistics.html        # Statistics page
-└── RECREATION_PROMPT.md       # This file
+└── .gitignore
 ```
 
-### 12. Testing Checklist
+### 12. Desktop Application (desktop_app.py)
+
+Create a standalone desktop application wrapper that:
+
+**Purpose**: Provides a native desktop experience without requiring a web browser
+
+**Key Features**:
+- Uses pywebview to create a native application window
+- Runs Flask server in a background daemon thread
+- Smart startup detection - waits for Flask to be ready before showing window
+- Window configuration:
+  - Title: "UFS Maritime Notices Tracker"
+  - Size: 1400x900 (resizable)
+  - Minimum size: 800x600
+  - URL: http://127.0.0.1:5000
+  - No confirm on close
+
+**Implementation Requirements**:
+```python
+import webview
+import threading
+import urllib.request
+import urllib.error
+from app import app as flask_app, init_db
+
+def start_flask():
+    """Run Flask in background thread"""
+    init_db()
+    flask_app.run(host='127.0.0.1', port=5000, debug=False, use_reloader=False)
+
+def wait_for_flask(max_attempts=30, delay=0.5):
+    """Wait for Flask to be ready by polling the endpoint"""
+    for i in range(max_attempts):
+        try:
+            response = urllib.request.urlopen('http://127.0.0.1:5000', timeout=1)
+            if response.status == 200:
+                return True
+        except:
+            time.sleep(delay)
+    return False
+
+def main():
+    # Start Flask thread
+    flask_thread = threading.Thread(target=start_flask, daemon=True)
+    flask_thread.start()
+    
+    # Wait for Flask
+    if not wait_for_flask():
+        print("ERROR: Could not start Flask server")
+        sys.exit(1)
+    
+    # Create and start webview window
+    window = webview.create_window(
+        title='UFS Maritime Notices Tracker',
+        url='http://127.0.0.1:5000',
+        width=1400,
+        height=900,
+        resizable=True,
+        min_size=(800, 600)
+    )
+    webview.start(debug=False)
+```
+
+### 13. Build System
+
+#### Two Executable Variants:
+
+**1. Desktop Application (Recommended)**:
+- File: `UFS-Tracker.exe` (Windows) or `UFS-Tracker` (Linux/Mac)
+- Built from: `desktop_app.py`
+- PyInstaller flags: `--onefile --noconsole`
+- Opens in native desktop window via pywebview
+- No console window, no browser needed
+
+**2. Console/Browser Application**:
+- File: `UFS-Tracker-Console.exe` (Windows)
+- Built from: `app.py`
+- PyInstaller flags: `--onefile --console`
+- Shows console window, opens in web browser
+- Useful for debugging
+
+#### Windows Build Command (Desktop):
+```bash
+pyinstaller --name=UFS-Tracker --onefile --noconsole \
+  --add-data "templates;templates" \
+  --hidden-import=flask --hidden-import=requests \
+  --hidden-import=bs4 --hidden-import=sqlite3 \
+  --hidden-import=webview --collect-all=webview \
+  desktop_app.py
+```
+
+#### Windows Build Command (Console):
+```bash
+pyinstaller --name=UFS-Tracker-Console --onefile --console \
+  --add-data "templates;templates" \
+  --hidden-import=flask --hidden-import=requests \
+  --hidden-import=bs4 --hidden-import=sqlite3 \
+  app.py
+```
+
+### 14. Branding Elements
+
+All pages must include:
+
+**Navigation Bar**:
+- Three main tabs: Hem, Visa notiser, Statistik (width: 130px each, centered)
+- About button (right-aligned with `margin-left: auto`)
+  - GitHub Octocat icon (SVG)
+  - "About" text
+  - External link arrow icon
+  - Links to: https://github.com/kristianwiklund/ufs_tracker
+  - Opens in new tab with `target="_blank" rel="noopener noreferrer"`
+  - Semi-transparent background (rgba(255, 255, 255, 0.1))
+
+**Footer** (on all pages):
+- Dark background (#2c3e50)
+- Centered content (max-width: 1400px)
+- Line 1: `© 2026 Kristian Wiklund` (link to https://github.com/kristianwiklund)
+- Line 2: `Licensed under MIT License | View on GitHub`
+- MIT License link: https://github.com/kristianwiklund/ufs_tracker/blob/main/LICENSE
+- GitHub repo link: https://github.com/kristianwiklund/ufs_tracker
+- Links styled in brand color (#667eea)
+
+### 15. Testing Checklist
 
 After recreation, verify:
+- [ ] Web mode: `python app.py` works and opens in browser
+- [ ] Desktop mode: `python desktop_app.py` opens native window
 - [ ] Search page loads all charts from UFS website
 - [ ] Search for "Bsp Stockholm N 2024" finds ~70+ notices
+- [ ] Search for "sjökort 111" works correctly (uses ChartNumbers parameter)
 - [ ] Notice numbers are correct (e.g., 19811, not 2024)
 - [ ] Clicking notice number/title opens UFS detail page
 - [ ] Notices page shows dropdown with only searched charts
 - [ ] Checkboxes disabled when no chart selected
 - [ ] Can mark notices as implemented per chart
 - [ ] Same notice can have different status for different charts
-- [ ] Statistics page shows per-chart breakdown
+- [ ] Statistics page shows per-chart breakdown with progress bars
 - [ ] All three pages have same width (1400px)
+- [ ] About button appears in navigation (right-aligned with GitHub icon)
+- [ ] Footer appears on all pages with copyright and GitHub links
 - [ ] Debug mode works with --debug flag
-- [ ] Server accessible from network (0.0.0.0:5000)
+- [ ] Windows builds: Both Desktop and Console executables work
+- [ ] GitHub Actions builds complete successfully
+- [ ] Chart mappings cache works (1 hour expiration)
+- [ ] Max 500 row safety limit prevents hangs
 
 ---
 

@@ -4,55 +4,86 @@ En standalone Python-webbapplikation för att skrapa, lagra och spåra implement
 
 ## Funktioner
 
+- 🖥️ **Desktop-läge**: Fristående desktopapplikation med pywebview (ingen webbläsare behövs)
+- 🌐 **Webb-läge**: Traditionell webbapplikation som öppnas i webbläsare
 - 🔍 **Sökning**: Sök efter notiser baserat på sjökortnummer eller båtsportkort
 - 💾 **Persistent lagring**: All data sparas i en SQLite-databas
-- ✅ **Implementeringsspårning**: Markera varje notis som implementerad med checkboxar
+- ✅ **Implementeringsspårning**: Markera varje notis som implementerad per sjökort
 - 📝 **Anteckningar**: Lägg till egna anteckningar för varje notis
-- 📊 **Statistik**: Se översikt över totalt antal notiser och implementeringsgrad
+- 📊 **Statistik**: Se översikt och framsteg per sjökort/båtsportkort
 - 🔗 **Direktlänkar**: Klicka dig vidare till originalnotisen på UFS-webbplatsen
+- 🏗️ **Byggsystem**: Skapa fristående körbara filer för Windows, Linux och Mac
 
-## Installation
+## Installation och körning
 
-### Förutsättningar
-- Python 3.7 eller senare
+### Alternativ 1: Desktop-applikation (Rekommenderas)
+
+Kör som fristående desktopapplikation (ingen webbläsare behövs):
+
+```bash
+pip install -r requirements.txt
+python desktop_app.py
+```
+
+Applikationen öppnas i ett eget fönster med pywebview.
+
+### Alternativ 2: Webb-läge (Traditionell)
+
+Kör som webbserver och öppna i webbläsare:
+
+```bash
+pip install -r requirements.txt
+python app.py
+```
+
+Gå sedan till `http://127.0.0.1:5000` i din webbläsare.
+
+### Alternativ 3: Använd startup-scriptet
+
+```bash
+./start.sh
+```
+
+För debug-läge:
+```bash
+python app.py --debug
+# eller
+python desktop_app.py  # (desktop-läge har inte --debug än)
+```
+
+## Förutsättningar
+- Python 3.8 eller senare
 - pip (Python package manager)
-
-### Steg för steg
-
-1. **Installera Python-beroenden**:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-2. **Kör applikationen**:
-   ```bash
-   python app.py
-   ```
-   
-   Eller använd startup-scriptet:
-   ```bash
-   ./start.sh
-   ```
-   
-   För att aktivera debug-utskrifter:
-   ```bash
-   python app.py --debug
-   # eller
-   ./start.sh --debug
-   ```
-
-3. **Öppna webbläsaren**:
-   Gå till `http://127.0.0.1:5000`
 
 ## Bygg standalone-applikation
 
-Du kan bygga applikationen som en fristående körbar fil för Windows, Linux, eller Mac:
+Du kan bygga applikationen som fristående körbara filer för Windows, Linux, eller Mac.
 
 ### Windows
+
+Bygger både Desktop-version och Konsol-version:
+
 ```batch
 build-windows.bat
 ```
-Detta skapar en `.exe`-fil i `dist/UFS-Tracker-Portable/` som kan köras utan att ha Python installerat.
+
+Detta skapar:
+- `UFS-Tracker.exe` - Desktop-applikation (rekommenderas, öppnas i eget fönster)
+- `UFS-Tracker-Console.exe` - Konsol-version (öppnas i webbläsare)
+
+Båda finns i `dist/UFS-Tracker-Portable/` och kan köras utan Python-installation.
+
+**Kör Desktop-versionen**:
+```batch
+cd dist\UFS-Tracker-Portable
+start.bat
+```
+
+**Kör Konsol-versionen**:
+```batch
+cd dist\UFS-Tracker-Portable
+start-console.bat
+```
 
 ### Linux/Mac
 ```bash

@@ -2,6 +2,21 @@
 
 This document describes how to build standalone executables for Windows, Linux, Mac, and Android.
 
+## Overview
+
+The application can be built in two variants:
+
+1. **Desktop Application (Recommended)**: Uses pywebview to create a native desktop window
+   - No browser needed
+   - Cleaner user experience
+   - File: `UFS-Tracker.exe` / `UFS-Tracker`
+
+2. **Console/Browser Application**: Traditional web server that opens in browser
+   - Shows console window
+   - Opens in default browser
+   - File: `UFS-Tracker-Console.exe`
+   - Useful for debugging
+
 ## Table of Contents
 - [Windows Build](#windows-build)
 - [Linux/Mac Build](#linuxmac-build)
@@ -25,45 +40,69 @@ This document describes how to build standalone executables for Windows, Linux, 
    ```
 
 3. The script will:
-   - Install PyInstaller
-   - Build the executable
+   - Install PyInstaller and pywebview
+   - Build TWO executables:
+     - **Desktop App**: `UFS-Tracker.exe` (uses pywebview, no console)
+     - **Console App**: `UFS-Tracker-Console.exe` (uses browser, shows console)
    - Create a portable package in `dist/UFS-Tracker-Portable/`
 
-4. To run the application:
+4. Package contents:
+   ```
+   dist/UFS-Tracker-Portable/
+   ├── UFS-Tracker.exe              ← Desktop app (RECOMMENDED)
+   ├── UFS-Tracker-Console.exe      ← Console/browser mode
+   ├── start.bat                    ← Launch desktop app
+   ├── start-console.bat            ← Launch browser mode
+   ├── README.md
+   ├── USER_GUIDE.md
+   └── README-PACKAGE.txt           ← Quick start guide
+   ```
+
+5. To run the Desktop Application (Recommended):
    - Navigate to `dist/UFS-Tracker-Portable/`
    - Double-click `start.bat`
-   - The application will open in your web browser
+   - Application opens in a native window
+
+6. To run the Console/Browser version:
+   - Navigate to `dist/UFS-Tracker-Portable/`
+   - Double-click `start-console.bat`
+   - Application opens in your browser
 
 ### Option 2: Manual Build
 
-1. Install PyInstaller:
-   ```batch
-   pip install pyinstaller
-   ```
+**Desktop Application Build**:
+```batch
+pip install pyinstaller pywebview
 
-2. Build the executable:
-   ```batch
-   pyinstaller --clean --name=UFS-Tracker --onefile ^
-       --add-data "templates;templates" ^
-       --hidden-import=flask ^
-       --hidden-import=requests ^
-       --hidden-import=bs4 ^
-       app.py
-   ```
+pyinstaller --clean --name=UFS-Tracker --onefile --noconsole ^
+    --add-data "templates;templates" ^
+    --hidden-import=flask ^
+    --hidden-import=requests ^
+    --hidden-import=bs4 ^
+    --hidden-import=sqlite3 ^
+    --hidden-import=webview ^
+    --collect-all=webview ^
+    desktop_app.py
+```
 
-3. The executable will be in `dist/UFS-Tracker.exe`
+**Console Application Build**:
+```batch
+pyinstaller --clean --name=UFS-Tracker-Console --onefile --console ^
+    --add-data "templates;templates" ^
+    --hidden-import=flask ^
+    --hidden-import=requests ^
+    --hidden-import=bs4 ^
+    --hidden-import=sqlite3 ^
+    app.py
+```
+
+The executables will be in `dist/`
 
 ### Distribution
 
-The portable package (`dist/UFS-Tracker-Portable/`) contains:
-- `UFS-Tracker.exe` - The main application
-- `start.bat` - Convenient startup script
-- `README.md` - Documentation
-- `USER_GUIDE.md` - User guide
-
-This folder can be zipped and distributed. Users just need to:
+The portable package can be zipped and distributed. Users just need to:
 1. Extract the ZIP file
-2. Double-click `start.bat`
+2. Double-click `start.bat` (Desktop) or `start-console.bat` (Browser)
 
 **No Python installation required on the target machine!**
 
@@ -292,9 +331,10 @@ Even without creating a release, you can download build artifacts:
 
 Expected sizes for built applications:
 
-- **Windows Executable:** ~15-25 MB
-- **Linux/Mac Executable:** ~15-25 MB
-- **Android APK:** ~30-50 MB (includes Python runtime)
+- **Windows Desktop Executable**: ~20-30 MB (includes pywebview)
+- **Windows Console Executable**: ~15-25 MB
+- **Linux/Mac Executable**: ~15-25 MB
+- **Android APK**: ~30-50 MB (includes Python runtime)
 
 ---
 
