@@ -260,7 +260,7 @@ Möjliga tillägg:
 
 ## Licens
 
-Denna applikation är skapad för privat och professionell användning. Data från Sjöfartsverkets UFS-databas är offentlig information.
+MIT license. 
 
 ## Support
 
