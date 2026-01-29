@@ -29,7 +29,13 @@ jobs:
     
     - name: Build Windows executable
       run: |
-        pyinstaller --name=UFS-Tracker --onefile --add-data "templates;templates" --hidden-import=flask --hidden-import=requests --hidden-import=bs4 --hidden-import=sqlite3 app.py
+        # List directory contents for debugging
+        dir
+        dir templates
+        
+        # Build using PyInstaller with proper path handling
+        pyinstaller --clean --name=UFS-Tracker --onefile --add-data "templates;templates" --hidden-import=flask --hidden-import=requests --hidden-import=bs4 --hidden-import=sqlite3 --console app.py
+      shell: cmd
     
     - name: Build Desktop GUI executable
       run: |
