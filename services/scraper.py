@@ -94,21 +94,26 @@ def get_chart_id(chart_name, chart_map):
     if not chart_name:
         return None
     
-    # If it's already a number, return it
-    if str(chart_name).isdigit():
-        return str(chart_name)
+    chart_name_str = str(chart_name)
     
-    # Try exact match
-    if chart_name in chart_map:
-        return chart_map[chart_name]
+    # Try exact match first (even for numbers)
+    if chart_name_str in chart_map:
+        return chart_map[chart_name_str]
     
     # Try case-insensitive match
     for name, chart_id in chart_map.items():
-        if name.lower() == str(chart_name).lower():
+        if name.lower() == chart_name_str.lower():
             return chart_id
     
-    # Return as-is if no match
-    return chart_name
+    # If it's a number and no match found, try it as-is
+    # (fallback for direct ID usage)
+    if chart_name_str.isdigit():
+        debug_print(f"WARNING: No mapping found for chart '{chart_name_str}', using as direct ID")
+        return chart_name_str
+    
+    # Return as-is if no match (last resort)
+    debug_print(f"WARNING: No mapping found for chart '{chart_name_str}', using as-is")
+    return chart_name_str
 
 def scrape_ufs_notices(sjokort_nummer=None, batsportkort=None, max_rows=500):
     """
