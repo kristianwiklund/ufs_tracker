@@ -189,20 +189,28 @@ CREATE TABLE search_history (
   - Notice number (clickable link to detail page)
   - Title (clickable link to detail page)
   - **Affected charts (Berörda kort)** - INTERACTIVE FEATURE:
-    - Parse the affected_charts field (e.g., "612Bsp Stockholm N 2024/s39, 621Bsp Stockholm S 2024")
+    - Parse the affected_charts field (e.g., "111Bsp Mälaren - Hjälmaren 2024/s25, s47, s48, 621")
     - Split on commas to get individual chart references
+    - Handle concatenated charts (e.g., "111Bsp Mälaren..." = chart "111" + "Bsp Mälaren...")
     - For each chart reference:
-      - Extract chart identifier (e.g., "Bsp Stockholm N 2024", "621")
+      - Extract chart identifier (strip page numbers like "/s25, s47")
+      - Keep page numbers for display purposes
       - Check if chart exists in tracked_charts list
       - If tracked: Display as clickable link with CSS class "chart-link"
       - If not tracked: Display as plain text with muted color
+    - Chart identifier extraction patterns:
+      - "111Bsp Mälaren - Hjälmaren 2024/s25" → Split into "111" and "Bsp Mälaren - Hjälmaren 2024"
+      - "Bsp Stockholm N 2024/s39" → "Bsp Stockholm N 2024"
+      - "621" → "621"
+      - Page numbers (/s25, s47) kept for display but removed for matching
     - On click of tracked chart:
       - Reload page with `chart_identifier=[clicked_chart]`
       - This switches the view to show notices for that chart
     - Styling:
-      - Clickable charts: Blue color (#667eea), underline on hover, pointer cursor
-      - Non-tracked charts: Gray color (#999), no hover effect
+      - Clickable charts: Blue color (#667eea), underline on hover, pointer cursor, tooltip
+      - Non-tracked charts: Gray color (#999), no hover effect, tooltip explaining not downloaded
       - Separate charts with commas and spaces
+      - Display page numbers with chart name but don't use for matching
   - Affected charts
   - Publication date
   - Scraped date

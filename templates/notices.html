@@ -418,7 +418,7 @@
                         <div class="notice-info">
                             {% if notice.affected_charts %}
                             <strong>Berörda kort:</strong>
-                            <span>{{ notice.affected_charts }}</span>
+                            <span class="affected-charts-text">{{ notice.affected_charts }}</span>
                             {% endif %}
                             
                             {% if notice.sjokort_nummer %}
@@ -552,83 +552,127 @@
             try {
                 const response = await fetch('/get_tracked_charts');
                 trackedChartsList = await response.json();
+                
+                console.log('Tracked charts:', trackedChartsList);
             } catch (error) {
                 console.error('Error fetching tracked charts:', error);
                 return;
             }
             
-            // Find all affected charts spans
-            const affectedChartsElements = document.querySelectorAll('.notice-card strong');
+            // Find all affected charts spans using specific class
+            const affectedChartsElements = document.querySelectorAll('.affected-charts-text');
+            console.log('Found affected charts elements:', affectedChartsElements.length);
             
-            affectedChartsElements.forEach(strong => {
-                if (strong.textContent.trim() === 'Berörda kort:') {
-                    const span = strong.nextElementSibling;
-                    if (span && span.tagName === 'SPAN') {
-                        const affectedChartsText = span.textContent;
-                        processAffectedCharts(span, affectedChartsText);
-                    }
-                }
+            affectedChartsElements.forEach(span => {
+                const affectedChartsText = span.textContent;
+                console.log('Processing:', affectedChartsText);
+                processAffectedCharts(span, affectedChartsText);
             });
         }
         
         function processAffectedCharts(span, text) {
             // Split by comma to get individual chart references
             const chartRefs = text.split(',').map(s => s.trim()).filter(s => s);
+            console.log('Chart refs:', chartRefs);
             
             // Clear the span
             span.innerHTML = '';
             
-            chartRefs.forEach((chartRef, index) => {
-                // Try to extract chart identifier
-                // Format examples: "612Bsp Stockholm N 2024/s39", "621", "Bsp Stockholm S 2024"
-                const chartIdentifier = extractChartIdentifier(chartRef);
+            let isFirstItem = true;
+            
+            chartRefs.forEach((chartRef) => {
+                // Check if this is a concatenated chart (number + Bsp name)
+                const pageNumberMatch = chartRef.match(/^([^\/]+)(\/.*)?$/);
+                const mainPart = pageNumberMatch ? pageNumberMatch[1] : chartRef;
+                const pageNumbers = pageNumberMatch && pageNumberMatch[2] ? pageNumberMatch[2] : '';
                 
-                // Check if this chart is tracked
-                const isTracked = trackedChartsList.includes(chartIdentifier);
+                const numberBspMatch = mainPart.match(/^(\d+)(Bsp.+)$/i);
                 
-                if (isTracked) {
-                    // Create clickable link
-                    const link = document.createElement('a');
-                    link.href = '#';
-                    link.className = 'chart-link';
-                    link.textContent = chartRef;
-                    link.onclick = function(e) {
-                        e.preventDefault();
-                        navigateToChart(chartIdentifier);
-                    };
-                    span.appendChild(link);
-                } else {
-                    // Create plain text with muted styling
-                    const textNode = document.createElement('span');
-                    textNode.className = 'chart-not-tracked';
-                    textNode.textContent = chartRef;
-                    span.appendChild(textNode);
-                }
-                
-                // Add comma separator except for last item
-                if (index < chartRefs.length - 1) {
+                if (numberBspMatch) {
+                    // Split into two separate charts: the number and the Bsp name
+                    const chartNumber = numberBspMatch[1];
+                    const bspName = numberBspMatch[2].trim();
+                    
+                    // Process the number chart
+                    if (!isFirstItem) {
+                        span.appendChild(document.createTextNode(', '));
+                    }
+                    processChartItem(span, chartNumber, chartNumber);
+                    isFirstItem = false;
+                    
+                    // Add comma before Bsp chart
                     span.appendChild(document.createTextNode(', '));
+                    
+                    // Process the Bsp chart with page numbers
+                    const bspDisplay = bspName + pageNumbers;
+                    processChartItem(span, bspDisplay, bspName);
+                } else {
+                    // Single chart reference
+                    if (!isFirstItem) {
+                        span.appendChild(document.createTextNode(', '));
+                    }
+                    
+                    const chartIdentifier = extractChartIdentifier(chartRef);
+                    processChartItem(span, chartRef, chartIdentifier);
+                    isFirstItem = false;
                 }
             });
         }
         
+        function processChartItem(span, displayText, chartIdentifier) {
+            console.log('Chart item:', displayText, '-> Identifier:', chartIdentifier);
+            
+            // Check if this chart is tracked
+            const isTracked = trackedChartsList.includes(chartIdentifier);
+            console.log('Is tracked?', isTracked);
+            
+            if (isTracked) {
+                // Create clickable link
+                const link = document.createElement('a');
+                link.href = '#';
+                link.className = 'chart-link';
+                link.textContent = displayText;
+                link.title = `Klicka för att visa notiser för ${chartIdentifier}`;
+                link.onclick = function(e) {
+                    e.preventDefault();
+                    navigateToChart(chartIdentifier);
+                };
+                span.appendChild(link);
+            } else {
+                // Create plain text with muted styling
+                const textNode = document.createElement('span');
+                textNode.className = 'chart-not-tracked';
+                textNode.textContent = displayText;
+                textNode.title = 'Detta kort är inte nedladdat än';
+                span.appendChild(textNode);
+            }
+        }
+        
         function extractChartIdentifier(chartRef) {
-            // Remove trailing reference like "/s39"
+            // Remove page references like "/s25, s47, s48" but keep for display
             let cleaned = chartRef.split('/')[0].trim();
             
-            // Try to match different patterns
-            // Pattern 1: "612Bsp Stockholm N 2024" -> extract "Bsp Stockholm N 2024"
-            const bspMatch = cleaned.match(/\d*(Bsp[^,]+)/i);
+            // Pattern 1: Number concatenated with Bsp (e.g., "111Bsp Mälaren - Hjälmaren 2024")
+            // This should be treated as TWO separate charts: "111" and "Bsp Mälaren - Hjälmaren 2024"
+            const numberBspMatch = cleaned.match(/^(\d+)(Bsp.+)$/i);
+            if (numberBspMatch) {
+                // Return the Bsp part only (the båtsportkort)
+                // The number part should be handled separately
+                return numberBspMatch[2].trim();
+            }
+            
+            // Pattern 2: Just "Bsp..." (e.g., "Bsp Stockholm N 2024")
+            const bspMatch = cleaned.match(/^(Bsp[^,]+)/i);
             if (bspMatch) {
                 return bspMatch[1].trim();
             }
             
-            // Pattern 2: Just a number like "621" -> "sjökort 621"
+            // Pattern 3: Just a number like "621" or "111"
             if (/^\d+$/.test(cleaned)) {
                 return cleaned;
             }
             
-            // Pattern 3: Already a chart name
+            // Pattern 4: Already a chart name
             return cleaned;
         }
         
@@ -637,11 +681,13 @@
             window.location.href = `/notices?chart_identifier=${encodeURIComponent(chartIdentifier)}&show_implemented=${showImplemented}`;
         }
         
-        // Load tracked charts on page load
-        loadTrackedCharts().then(() => {
-            // After tracked charts are loaded, make affected charts clickable
-            makeAffectedChartsClickable();
-        });
+        // Load tracked charts on page load and make affected charts clickable
+        async function initializePage() {
+            await loadTrackedCharts();
+            await makeAffectedChartsClickable();
+        }
+        
+        initializePage();
         
         // Auto-reload when chart selection changes
         document.getElementById('chart_identifier').addEventListener('change', function() {
