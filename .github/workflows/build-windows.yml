@@ -32,28 +32,36 @@ jobs:
     
     - name: Build Console executable
       run: |
-        pyinstaller --name=UFS-Tracker-Console --onefile --console --add-data "templates;templates" --hidden-import=flask --hidden-import=requests --hidden-import=bs4 --hidden-import=sqlite3 app.py
+        pyinstaller UFS-Tracker.spec
     
     - name: Build Desktop GUI executable
       run: |
-        pyinstaller --name=UFS-Tracker --onefile --noconsole --add-data "templates;templates" --hidden-import=flask --hidden-import=requests --hidden-import=bs4 --hidden-import=sqlite3 --hidden-import=webview --collect-all=webview desktop_app.py
+        pyinstaller UFS-Tracker-Desktop.spec
     
-    - name: Create portable packages
+    - name: Create portable package
       run: |
         mkdir UFS-Tracker-Windows
-        copy dist\UFS-Tracker.exe UFS-Tracker-Windows\
-        copy dist\UFS-Tracker-Console.exe UFS-Tracker-Windows\
+        
+        rem Copy the Desktop app bundle
+        xcopy /E /I dist\UFS-Tracker-Desktop UFS-Tracker-Windows\Desktop
+        
+        rem Copy the Console app bundle
+        xcopy /E /I dist\UFS-Tracker UFS-Tracker-Windows\Console
+        
+        rem Copy docs
         copy README.md UFS-Tracker-Windows\
         copy USER_GUIDE.md UFS-Tracker-Windows\
         
+        rem start.bat runs the Desktop (pywebview) app
         echo @echo off > UFS-Tracker-Windows\start.bat
-        echo echo Starting UFS Maritime Notices Tracker (Desktop App)... >> UFS-Tracker-Windows\start.bat
-        echo UFS-Tracker.exe >> UFS-Tracker-Windows\start.bat
+        echo echo Starting UFS Maritime Notices Tracker... >> UFS-Tracker-Windows\start.bat
+        echo Desktop\UFS-Tracker-Desktop.exe >> UFS-Tracker-Windows\start.bat
         
+        rem start-console.bat runs the browser version
         echo @echo off > UFS-Tracker-Windows\start-console.bat
         echo echo Starting UFS Maritime Notices Tracker (Browser mode)... >> UFS-Tracker-Windows\start-console.bat
         echo start http://127.0.0.1:5000 >> UFS-Tracker-Windows\start-console.bat
-        echo UFS-Tracker-Console.exe >> UFS-Tracker-Windows\start-console.bat
+        echo Console\UFS-Tracker.exe >> UFS-Tracker-Windows\start-console.bat
         
         echo UFS Maritime Notices Tracker - Windows Package > UFS-Tracker-Windows\README-PACKAGE.txt
         echo. >> UFS-Tracker-Windows\README-PACKAGE.txt
@@ -61,7 +69,7 @@ jobs:
         echo Browser Mode: Double-click start-console.bat >> UFS-Tracker-Windows\README-PACKAGE.txt
       shell: cmd
     
-    - name: Upload artifact (unzipped for download)
+    - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
         name: UFS-Tracker-Windows

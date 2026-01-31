@@ -14,6 +14,9 @@ from utils.chart_parser import parse_notice_type
 app = Flask(__name__)
 app.config['DATABASE'] = 'ufs_notices.db'
 
+# Make datetime.now() available inside all Jinja2 templates
+app.jinja_env.globals['now'] = datetime.now
+
 # Global debug flag
 DEBUG_MODE = False
 
@@ -237,6 +240,11 @@ def update_status(notice_id):
     conn.close()
     
     return jsonify({'success': True})
+
+@app.route('/help')
+def help_page():
+    """Documentation and correction instructions"""
+    return render_template('help.html')
 
 @app.route('/statistics')
 def statistics():

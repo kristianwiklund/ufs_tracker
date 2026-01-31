@@ -8,6 +8,10 @@ a = Analysis(
     binaries=[],
     datas=[
         ('templates', 'templates'),
+        ('static', 'static'),
+        ('models', 'models'),
+        ('services', 'services'),
+        ('utils', 'utils'),
     ],
     hiddenimports=[
         'flask',
@@ -22,6 +26,12 @@ a = Analysis(
         're',
         'webview',
         'webview.platforms.winforms',
+        'models',
+        'models.database',
+        'services',
+        'services.scraper',
+        'utils',
+        'utils.chart_parser',
     ],
     hookspath=[],
     hooksconfig={},

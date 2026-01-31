@@ -8,6 +8,10 @@ a = Analysis(
     binaries=[],
     datas=[
         ('templates', 'templates'),
+        ('static', 'static'),
+        ('models', 'models'),
+        ('services', 'services'),
+        ('utils', 'utils'),
     ],
     hiddenimports=[
         'flask',
@@ -20,6 +24,12 @@ a = Analysis(
         'json',
         'os',
         're',
+        'models',
+        'models.database',
+        'services',
+        'services.scraper',
+        'utils',
+        'utils.chart_parser',
     ],
     hookspath=[],
     hooksconfig={},
