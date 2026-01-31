@@ -207,7 +207,7 @@
             
             affectedChartsElements.forEach(span => {
                 const affectedChartsText = span.textContent;
-                span.innerHTML = processAffectedChartsHTML(affectedChartsText, trackedChartsList);
+                span.innerHTML = makeAffectedChartsClickable(affectedChartsText, trackedChartsList);
             });
         } catch (error) {
             console.error('Error making charts clickable:', error);

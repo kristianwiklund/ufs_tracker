@@ -1,0 +1,27 @@
+{% if notice.notice_type == 'temporary' %}
+    {% if notice.expiry_date %}
+        {% set expiry = notice.expiry_date %}
+        {% set now = now() %}
+        {% if expiry < now %}
+            <span class="badge badge-expired" title="Expired temporary notice - valid until {{ expiry }}">
+                🔴 T (Utgången)
+            </span>
+        {% else %}
+            <span class="badge badge-temporary" title="Temporary notice - valid until {{ expiry }}">
+                🔴 T
+            </span>
+        {% endif %}
+    {% else %}
+        <span class="badge badge-temporary" title="Temporary notice">
+            🔴 T
+        </span>
+    {% endif %}
+{% elif notice.notice_type == 'preliminary' %}
+    <span class="badge badge-preliminary" title="Preliminary notice - awaiting permanent correction">
+        🟡 P
+    </span>
+{% else %}
+    <span class="badge badge-permanent" title="Permanent correction">
+        🟢
+    </span>
+{% endif %}
