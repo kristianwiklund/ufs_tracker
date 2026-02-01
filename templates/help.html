@@ -1,0 +1,465 @@
+{% extends "base.html" %}
+
+{% block title %}UFS Maritime Notices Tracker - Dokumentation{% endblock %}
+
+{% block extra_css %}
+<style>
+    .help-section {
+        margin-bottom: 40px;
+    }
+
+    .help-section h2 {
+        color: #2c3e50;
+        border-bottom: 3px solid #667eea;
+        padding-bottom: 10px;
+        margin-bottom: 20px;
+    }
+
+    .help-section h3 {
+        color: #34495e;
+        margin: 25px 0 10px 0;
+    }
+
+    .help-section p, .help-section li {
+        color: #444;
+        line-height: 1.7;
+    }
+
+    .help-section ul {
+        margin-left: 24px;
+        margin-bottom: 16px;
+    }
+
+    .help-section ol {
+        margin-left: 24px;
+        margin-bottom: 16px;
+    }
+
+    .help-section ol li {
+        margin-bottom: 6px;
+    }
+
+    /* Notice type legend cards */
+    .type-legend {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 16px;
+        margin: 20px 0;
+    }
+
+    .type-card {
+        border-radius: 8px;
+        padding: 20px;
+        border-left: 5px solid;
+    }
+
+    .type-card.permanent {
+        background: #eafaf1;
+        border-left-color: #27ae60;
+    }
+    .type-card.temporary {
+        background: #fdedec;
+        border-left-color: #e74c3c;
+    }
+    .type-card.preliminary {
+        background: #fef9e7;
+        border-left-color: #f39c12;
+    }
+
+    .type-card .type-header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 10px;
+    }
+
+    .type-card .type-header .badge {
+        font-size: 1.1em;
+    }
+
+    .type-card .type-header h4 {
+        margin: 0;
+        font-size: 1.05em;
+        color: #2c3e50;
+    }
+
+    .type-card p {
+        margin: 0;
+        font-size: 0.92em;
+    }
+
+    .type-card .type-detail {
+        margin-top: 10px;
+        font-size: 0.85em;
+        color: #666;
+    }
+
+    .type-card .type-detail span {
+        display: inline-block;
+        background: rgba(0,0,0,0.06);
+        border-radius: 4px;
+        padding: 2px 8px;
+        margin: 2px 2px 2px 0;
+    }
+
+    /* Correction workflow steps */
+    .workflow {
+        position: relative;
+        padding-left: 36px;
+        margin: 20px 0;
+    }
+
+    .workflow-step {
+        position: relative;
+        margin-bottom: 18px;
+    }
+
+    .workflow-step::before {
+        content: attr(data-step);
+        position: absolute;
+        left: -36px;
+        top: 0;
+        width: 26px;
+        height: 26px;
+        background: #667eea;
+        color: white;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.82em;
+        font-weight: bold;
+    }
+
+    .workflow-step h4 {
+        margin: 0 0 4px 0;
+        color: #2c3e50;
+    }
+
+    .workflow-step p {
+        margin: 0;
+        font-size: 0.92em;
+    }
+
+    /* External links */
+    .source-links {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 14px;
+        margin: 20px 0;
+    }
+
+    .source-link {
+        display: flex;
+        align-items: flex-start;
+        gap: 14px;
+        background: #f8f9fa;
+        border: 1px solid #e9ecef;
+        border-radius: 8px;
+        padding: 16px;
+        text-decoration: none;
+        color: inherit;
+        transition: box-shadow 0.2s, border-color 0.2s;
+    }
+
+    .source-link:hover {
+        border-color: #667eea;
+        box-shadow: 0 2px 8px rgba(102,126,234,0.15);
+    }
+
+    .source-link .link-icon {
+        font-size: 1.5em;
+        flex-shrink: 0;
+        line-height: 1;
+    }
+
+    .source-link h4 {
+        margin: 0 0 3px 0;
+        color: #2c3e50;
+        font-size: 0.95em;
+    }
+
+    .source-link p {
+        margin: 0;
+        font-size: 0.82em;
+        color: #666;
+    }
+
+    .source-link .link-url {
+        font-size: 0.78em;
+        color: #667eea;
+        margin-top: 4px;
+        word-break: break-all;
+    }
+
+    /* Ink note box */
+    .ink-note {
+        background: #fef3cd;
+        border: 1px solid #ffc107;
+        border-radius: 6px;
+        padding: 14px 18px;
+        margin: 16px 0;
+        font-size: 0.9em;
+        color: #856404;
+    }
+
+    .ink-note strong {
+        color: #533f03;
+    }
+
+    /* Summary table */
+    .summary-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 16px 0;
+        font-size: 0.9em;
+    }
+
+    .summary-table th {
+        background: #34495e;
+        color: white;
+        text-align: left;
+        padding: 10px 14px;
+        font-weight: 600;
+    }
+
+    .summary-table td {
+        padding: 10px 14px;
+        border-bottom: 1px solid #e9ecef;
+        color: #444;
+    }
+
+    .summary-table tr:nth-child(even) td {
+        background: #f8f9fa;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- 1. HOW TO USE THE APPLICATION -->
+<div class="help-section">
+    <h2>📖 Hur man använder UFS Tracker</h2>
+
+    <h3>Söka och hämta notiser</h3>
+    <ol>
+        <li>Gå till <strong>Hem</strong>. Appen hämtar automatiskt alla tillgängliga sjökort och båtsportkort från UFS vid sidladningen.</li>
+        <li>Välj ett sjökort eller båtsportkort i rullmenen.</li>
+        <li>Klicka <em>Sök och hämta notiser</em>. Appen kontaktar UFS och sparar alla relevanta notiser i databasen.</li>
+        <li>Efter sökning skickas du automatiskt till <strong>Visa notiser</strong> för det valda kortet.</li>
+    </ol>
+
+    <h3>Hantera notiser</h3>
+    <ol>
+        <li>Välj ett kort i rullmenen på sidan <strong>Visa notiser</strong> för att see dess notiser.</li>
+        <li>Bocka i <em>Implementerad</em> när du har applicerat ändringen på ditt fiziska sjökort.</li>
+        <li>Använd anteckningsfältet för att spara kommentarer — t.ex. datum och metod.</li>
+        <li>Klicka på notisnummeret (#) för att gå till originalnotisen på UFS.</li>
+        <li>Klicka på ett <strong>berört kort</strong> (blå länk) för att hoppa direkt till notislistans för det kortet.</li>
+    </ol>
+
+    <h3>Statistik</h3>
+    <p>Sidan <strong>Statistik</strong> visar en helhetsbild: totalt antal notiser, implementeringsgrad per kort, och din sökhistorik.</p>
+</div>
+
+<!-- 2. NOTICE TYPES AND SEVERITY -->
+<div class="help-section">
+    <h2>🏷️ Notistyper och allvarlighetsgrad</h2>
+    <p>Varje notis är klassifierad i en av tre kategorier. Kategori bestäms av notisnummeret på UFS: ett suffix <strong>T</strong> betecknar tillfällig, ett suffix <strong>P</strong> betecknar preliminär, och inget suffix betecknar permanent.</p>
+
+    <div class="type-legend">
+        <div class="type-card permanent">
+            <div class="type-header">
+                <span class="badge badge-permanent">🟢</span>
+                <h4>Permanent</h4>
+            </div>
+            <p>Verifierad ändring som ska appliceras permanent på kortet. Gäller tills nytt kortsutgåva ges ut.</p>
+            <div class="type-detail">
+                <span>Magenta bläck</span>
+                <span>Raderas inte</span>
+                <span>Räknas mot 6-gränsen</span>
+            </div>
+        </div>
+
+        <div class="type-card temporary">
+            <div class="type-header">
+                <span class="badge badge-temporary">🔴 T</span>
+                <h4>Tillfällig</h4>
+            </div>
+            <p>Tidsbegränsad ändring — t.ex. pågående arbeten, övningsområden eller säsongsberänsningar. Måste tas bort när giltighetstiden löper ut.</p>
+            <div class="type-detail">
+                <span>Blyerts</span>
+                <span>Raderas vid utgång</span>
+                <span>Hög prioritet</span>
+            </div>
+        </div>
+
+        <div class="type-card preliminary">
+            <div class="type-header">
+                <span class="badge badge-preliminary">🟡 P</span>
+                <h4>Preliminär</h4>
+            </div>
+            <p>Snabb varning baserad på ofullständig information. En permanent notis som ersätter den preliminära publiceras när fullständig undersökning är klar.</p>
+            <div class="type-detail">
+                <span>Blyerts</span>
+                <span>Raderas vid ersättning</span>
+                <span>Bevaka för uppföljning</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="ink-note">
+        <strong>Varför blyerts för T och P?</strong> Tillfälliga och preliminära notiser är per definition tillfälliga. Blyerts gör det möjligt att raderat markeringen när den inte längre är aktuell. Permanent notiser appliceras i magenta bläck eftersom de ska stanna på kortet.
+    </div>
+</div>
+
+<!-- 3. HOW TO MAKE CORRECTIONS -->
+<div class="help-section">
+    <h2>✏️ Hur man applicerar korrigeringar</h2>
+    <p>Nedanför beskrivs den allmänna korrigeringsrutinen enligt UKHO Admiralty-standard (NP294). Principen är densamma oavsett om du arbetar med svenska sjökort eller internationella.</p>
+
+    <h3>Allmän rutin</h3>
+    <div class="workflow">
+        <div class="workflow-step" data-step="1">
+            <h4>Mottag notisen</h4>
+            <p>Hämta nya notiser via UFS Tracker eller direkt från <a href="https://ufs.sjofartsverket.se" target="_blank">ufs.sjofartsverket.se</a>.</p>
+        </div>
+        <div class="workflow-step" data-step="2">
+            <h4>Kontrollera berörda kort</h4>
+            <p>Jämför notisen mot din kartportfölje. Applicera ändringen på <em>alla</em> berörda kort.</p>
+        </div>
+        <div class="workflow-step" data-step="3">
+            <h4>Applicera korrigeringen</h4>
+            <p><strong>Permanent:</strong> Magenta bläck (0.18–0.25 mm penna). <strong>Tillfällig/Preliminär:</strong> Blyerts.</p>
+        </div>
+        <div class="workflow-step" data-step="4">
+            <h4>Anteckna notisnummeret</h4>
+            <p>Skriv notisnummeret i nedre vänstra hörnet på kortet.</p>
+        </div>
+        <div class="workflow-step" data-step="5">
+            <h4>Dokumentera i UFS Tracker</h4>
+            <p>Bocka i <em>Implementerad</em> och lämna vid behöver en anteckning.</p>
+        </div>
+    </div>
+
+    <h3>Tillfälliga notiser (T) — extra steg</h3>
+    <ol>
+        <li>Anteckna <strong>utgångsdatumet</strong> bredvid markeringen på kortet.</li>
+        <li>Arkivera notisen separat (T&amp;P-mapp).</li>
+        <li>Sätt en påminnelse inför utgångsdatumet.</li>
+        <li>När datum passerat: <strong>radera</strong> markeringen och uppdatera UFS Tracker.</li>
+    </ol>
+
+    <h3>Preliminära notiser (P) — extra steg</h3>
+    <ol>
+        <li>Märk markeringen med <strong>P</strong> på kortet.</li>
+        <li>Bevaka UFS för den permanenta uppföljningsnotisen.</li>
+        <li>När permanent notis kommer: radera P-markeringen och applicera permanent i magenta.</li>
+    </ol>
+
+    <div class="ink-note">
+        <strong>6-korrigeringsgränsen:</strong> När ett sjökort har sex eller fler permanenta korrigeringar blir det svårt att läsa och risken för fel ökar. Ordna ett nytt exemplar och börja om. Tillfälliga och preliminära korrigeringar räknas <em>inte</em> mot denna gräns eftersom de raderas.
+    </div>
+</div>
+
+<!-- 4. SUMMARY TABLE -->
+<div class="help-section">
+    <h2>📋 Snabbreferens</h2>
+    <table class="summary-table">
+        <thead>
+            <tr>
+                <th>Typ</th>
+                <th>Badge</th>
+                <th>Verktyg</th>
+                <th>Raderas</th>
+                <th>Prioritet</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>Permanent</td>
+                <td>🟢</td>
+                <td>Magenta bläck</td>
+                <td>Aldri (tills nytt exemplar)</td>
+                <td>Normal</td>
+            </tr>
+            <tr>
+                <td>Tillfällig (T)</td>
+                <td>🔴 T</td>
+                <td>Blyerts</td>
+                <td>Ja — vid utgång</td>
+                <td>Hög</td>
+            </tr>
+            <tr>
+                <td>Preliminär (P)</td>
+                <td>🟡 P</td>
+                <td>Blyerts</td>
+                <td>Ja — vid permanent ersättning</td>
+                <td>Hög</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+<!-- 5. SOURCES AND REFERENCES -->
+<div class="help-section">
+    <h2>🔗 Källor och referensmaterial</h2>
+
+    <div class="source-links">
+        <a href="https://ufs.sjofartsverket.se" target="_blank" rel="noopener noreferrer" class="source-link">
+            <span class="link-icon">🇸🇪</span>
+            <div>
+                <h4>UFS — Underrättelser för Sjöfarande</h4>
+                <p>Sjöfartsverkets officiella källa för alla svenska notiser till sjöfarande.</p>
+                <div class="link-url">https://ufs.sjofartsverket.se</div>
+            </div>
+        </a>
+
+        <a href="https://www.sjofartsverket.se" target="_blank" rel="noopener noreferrer" class="source-link">
+            <span class="link-icon">⚓</span>
+            <div>
+                <h4>Sjöfartsverket</h4>
+                <p>Svenska Maritime Administration — regler, föreskrifter och allmänt informationsresurs.</p>
+                <div class="link-url">https://www.sjofartsverket.se</div>
+            </div>
+        </a>
+
+        <a href="https://www.ukho.gov.uk" target="_blank" rel="noopener noreferrer" class="source-link">
+            <span class="link-icon">🇬🇧</span>
+            <div>
+                <h4>UKHO — UK Hydrographic Office</h4>
+                <p>Källa för Admiralty-standarder som NP294 (kartanvändning) och NP133A (korrigeringslogg).</p>
+                <div class="link-url">https://www.ukho.gov.uk</div>
+            </div>
+        </a>
+
+        <a href="https://www.imo.org" target="_blank" rel="noopener noreferrer" class="source-link">
+            <span class="link-icon">🌍</span>
+            <div>
+                <h4>IMO — International Maritime Organization</h4>
+                <p>Internationella maritima regler och riktlinjer för säker sjöfart.</p>
+                <div class="link-url">https://www.imo.org</div>
+            </div>
+        </a>
+
+        <a href="https://www.iala-aism.org" target="_blank" rel="noopener noreferrer" class="source-link">
+            <span class="link-icon">🚢</span>
+            <div>
+                <h4>IALA — International Association of Marine Aids to Navigation</h4>
+                <p>Standards för navigationshjälpmedel och maritima signalsystem.</p>
+                <div class="link-url">https://www.iala-aism.org</div>
+            </div>
+        </a>
+
+        <a href="https://github.com/kristianwiklund/ufs_tracker" target="_blank" rel="noopener noreferrer" class="source-link">
+            <span class="link-icon">💻</span>
+            <div>
+                <h4>UFS Tracker — GitHub</h4>
+                <p>Källkod, buggrapporter och ytterligare dokumentation för denna applikation.</p>
+                <div class="link-url">https://github.com/kristianwiklund/ufs_tracker</div>
+            </div>
+        </a>
+    </div>
+</div>
+
+{% endblock %}

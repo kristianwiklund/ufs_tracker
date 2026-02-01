@@ -75,3 +75,14 @@ exe = EXE(
     entitlements_file=None,
     icon=None,  # Add icon=app.ico if you have an icon file
 )
+
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    strip=False,
+    upx=True,
+    upx_exclude=[],
+    name='UFS-Tracker-Desktop',
+)
