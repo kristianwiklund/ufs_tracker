@@ -8,7 +8,7 @@ from datetime import datetime
 
 # Import our modules
 from models.database import init_db, get_db, migrate_add_notice_types
-from services.scraper import scrape_ufs_notices, get_chart_mappings, set_debug_mode
+from services.scraper import scrape_ufs_notices, get_chart_mappings, set_debug_mode, get_scrape_progress
 from utils.chart_parser import parse_notice_type
 
 app = Flask(__name__)
@@ -200,6 +200,11 @@ def search():
         conn.close()
     
     return jsonify(result)
+
+@app.route('/search/progress')
+def search_progress():
+    """Return current scrape progress for the frontend progress bar"""
+    return jsonify(get_scrape_progress())
 
 @app.route('/notices')
 def list_notices():

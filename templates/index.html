@@ -91,6 +91,30 @@
         text-align: center;
         padding: 20px;
     }
+
+    .progress-track {
+        width: 100%;
+        max-width: 500px;
+        margin: 0 auto;
+        height: 22px;
+        background: #e0e0e0;
+        border-radius: 11px;
+        overflow: hidden;
+    }
+
+    .progress-fill {
+        height: 100%;
+        width: 0%;
+        background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+        border-radius: 11px;
+        transition: width 0.4s ease;
+    }
+
+    .progress-text {
+        margin-top: 12px;
+        color: #555;
+        font-size: 0.92em;
+    }
 </style>
 {% endblock %}
 
@@ -123,9 +147,11 @@
         </div>
     </form>
     
-    <div id="loading" class="loading">
-        <div class="spinner"></div>
-        <p style="margin-top: 15px;">Söker och hämtar notiser...</p>
+    <div id="loading" class="loading" style="display:none;">
+        <div class="progress-track">
+            <div class="progress-fill" id="progressFill" style="width:0%;"></div>
+        </div>
+        <p id="progressText" class="progress-text">Söker och hämtar notiser…</p>
     </div>
     
     <div id="message" class="message"></div>
@@ -182,9 +208,10 @@
             return;
         }
         
-        // Show loading
+        // Show progress bar, hide any previous message
         document.getElementById('loading').style.display = 'block';
         document.getElementById('message').style.display = 'none';
+        setProgress(0, 'Söker och hämtar notiser…');
         
         // Prepare form data
         const formData = new FormData();
@@ -195,33 +222,92 @@
         } else {
             formData.append('batsportkort', chartName);
         }
-        
+
+        // Fire the search request (runs server-side, may take a while)
+        let resultPromise;
         try {
-            const response = await fetch('/search', {
+            resultPromise = fetch('/search', {
                 method: 'POST',
                 body: formData
             });
-            
-            const result = await response.json();
-            
-            // Hide loading
+        } catch (error) {
             document.getElementById('loading').style.display = 'none';
-            
+            showMessage('Nätverksfel: ' + error.message, 'error');
+            return;
+        }
+
+        // Poll progress while the search is running
+        const pollInterval = setInterval(async () => {
+            try {
+                const progResp = await fetch('/search/progress');
+                const prog = await progResp.json();
+
+                if (!prog.active) {
+                    // Scrape finished (or never started) — stop polling;
+                    // the result handler below will finish the UI.
+                    clearInterval(pollInterval);
+                    return;
+                }
+
+                // Translate two-phase progress into a single 0-100 bar.
+                // Phase 1 ("Hämtar notiser…") counts as the first 40 %.
+                // Phase 2 ("Klassifierar notiser…") is the remaining 60 %.
+                let pct = 0;
+                let label = prog.phase;
+
+                if (prog.phase.startsWith('Hämtar')) {
+                    // Phase 1
+                    pct = prog.total > 0
+                        ? (prog.current / prog.total) * 40
+                        : 20;   // indeterminate fallback
+                } else if (prog.phase.startsWith('Klassifierar')) {
+                    // Phase 2
+                    pct = 40 + (prog.total > 0
+                        ? (prog.current / prog.total) * 60
+                        : 30);  // indeterminate fallback
+                    if (prog.tier2_queue > 0) {
+                        label += ` (${prog.tier2_queue} kvar)`;
+                    }
+                }
+
+                setProgress(pct, label);
+            } catch (_) {
+                // Network hiccup on progress poll — ignore, keep polling
+            }
+        }, 500);
+
+        // Wait for the actual search result
+        try {
+            const response = await resultPromise;
+            clearInterval(pollInterval);   // stop polling if still running
+            const result = await response.json();
+
+            // Fill bar to 100 before showing the result
+            setProgress(100, 'Klart');
+
+            // Small pause so the user sees 100 %
+            await new Promise(r => setTimeout(r, 400));
+            document.getElementById('loading').style.display = 'none';
+
             if (result.error) {
                 showMessage('Fel: ' + result.error, 'error');
             } else if (result.success) {
                 showMessage(result.message, 'success');
-                
-                // Redirect to notices page after 1.5 seconds
                 setTimeout(() => {
                     window.location.href = `/notices?chart_identifier=${encodeURIComponent(chartName)}`;
                 }, 1500);
             }
         } catch (error) {
+            clearInterval(pollInterval);
             document.getElementById('loading').style.display = 'none';
             showMessage('Nätverksfel: ' + error.message, 'error');
         }
     });
+
+    function setProgress(pct, label) {
+        document.getElementById('progressFill').style.width = Math.min(pct, 100) + '%';
+        document.getElementById('progressText').textContent = label;
+    }
     
     function showMessage(text, type) {
         const messageDiv = document.getElementById('message');

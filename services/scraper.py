@@ -13,6 +13,36 @@ from utils.chart_parser import parse_notice_type, extract_expiry_date
 CHART_MAPPINGS_CACHE = {'data': None, 'timestamp': None}
 CACHE_DURATION = 3600  # 1 hour in seconds
 
+# Delay between consecutive Tier-2 detail-page fetches (seconds).
+# Keeps us from hammering UFS when many notices need individual classification.
+TIER2_DELAY = 0.3
+
+# ---------------------------------------------------------------------------
+# Scrape-progress state — written by the scraper, read by /search/progress.
+# A single global dict is fine: only one scrape runs at a time (Flask dev
+# server is single-threaded; production deployments would need per-request
+# state, but that is out of scope here).
+# ---------------------------------------------------------------------------
+_scrape_progress = {
+    'active':      False,   # True while a scrape is in flight
+    'phase':       '',      # human-readable label for the current phase
+    'current':     0,       # notices processed so far in the current phase
+    'total':       0,       # total notices in the current phase
+    'tier2_queue': 0,       # how many notices still need a Tier-2 fetch
+}
+
+def get_scrape_progress():
+    """Return a snapshot of current scrape progress (called by the route)."""
+    return dict(_scrape_progress)
+
+def _set_progress(active=None, phase=None, current=None, total=None, tier2_queue=None):
+    """Atomically update whichever progress fields are provided."""
+    if active       is not None: _scrape_progress['active']      = active
+    if phase        is not None: _scrape_progress['phase']       = phase
+    if current      is not None: _scrape_progress['current']     = current
+    if total        is not None: _scrape_progress['total']       = total
+    if tier2_queue  is not None: _scrape_progress['tier2_queue'] = tier2_queue
+
 DEBUG_MODE = False
 
 def set_debug_mode(enabled):
@@ -193,50 +223,88 @@ def scrape_ufs_notices(sjokort_nummer=None, batsportkort=None, max_rows=500):
             debug_print(f"WARNING: Found {len(rows)} rows, limiting to {max_rows}")
             rows = rows[:max_rows]
         
-        # Process each row
+        # ------------------------------------------------------------------
+        # Phase 1 — parse all rows, classify via Tier 1 (suffix) only.
+        # No extra HTTP requests.  Notices that need Tier 2 are collected
+        # into `needs_detail` for Phase 2.
+        # ------------------------------------------------------------------
+        _set_progress(active=True, phase='Hämtar notiser från UFS…', current=0, total=len(rows), tier2_queue=0)
+
+        notices = []
+        needs_detail = []   # indices into `notices` that still need Tier 2
+
         for idx, row in enumerate(rows):
             notice = parse_notice_row(row, idx)
             if notice:
-                # --- classify the notice type ---
-                # Priority 1: (T)/(P) suffix visible in the table cell
                 suffix = notice.pop('_suffix', None)
                 if suffix == 'T':
-                    notice['notice_type'] = 'temporary'
-                    notice['is_temporary'] = True
+                    notice['notice_type']    = 'temporary'
+                    notice['is_temporary']   = True
                     notice['is_preliminary'] = False
                     debug_print(f"  Classified {notice['notice_number']} as temporary (suffix)")
                 elif suffix == 'P':
-                    notice['notice_type'] = 'preliminary'
-                    notice['is_temporary'] = False
+                    notice['notice_type']    = 'preliminary'
+                    notice['is_temporary']   = False
                     notice['is_preliminary'] = True
                     debug_print(f"  Classified {notice['notice_number']} as preliminary (suffix)")
                 else:
-                    # Priority 2: fetch the detail page and read Class/type
-                    detail_type = fetch_notice_class_type(notice['notice_number'])
-                    if detail_type:
-                        notice['notice_type'] = detail_type
-                        notice['is_temporary'] = (detail_type == 'temporary')
-                        notice['is_preliminary'] = (detail_type == 'preliminary')
-                        debug_print(f"  Classified {notice['notice_number']} as {detail_type} (detail page)")
-                    else:
-                        # Priority 3: fall back to the old number-suffix heuristic
-                        type_info = parse_notice_type(notice.get('notice_number', ''))
-                        notice.update(type_info)
-                        debug_print(f"  Classified {notice['notice_number']} as {type_info['notice_type']} (heuristic fallback)")
-
-                # Extract expiry date for temporary notices
-                if notice.get('is_temporary'):
-                    expiry = extract_expiry_date(
-                        notice.get('title', ''),
-                        notice.get('content', '')
-                    )
-                    notice['expiry_date'] = expiry
+                    # Mark as unclassified for now; Phase 2 will fill it in.
+                    notice['notice_type']    = None
+                    notice['is_temporary']   = False
+                    notice['is_preliminary'] = False
+                    needs_detail.append(len(notices))
 
                 notices.append(notice)
-        
+
+            _set_progress(current=idx + 1)
+
+        debug_print(f"Phase 1 complete: {len(notices)} notices, {len(needs_detail)} need Tier 2")
+
+        # ------------------------------------------------------------------
+        # Phase 2 — fetch detail pages only for notices that Tier 1 could
+        # not classify.  Each fetch is followed by a short delay to avoid
+        # hammering UFS.
+        # ------------------------------------------------------------------
+        if needs_detail:
+            _set_progress(phase='Klassifierar notiser…', current=0, total=len(needs_detail), tier2_queue=len(needs_detail))
+
+            for step, notice_idx in enumerate(needs_detail):
+                notice = notices[notice_idx]
+                detail_type = fetch_notice_class_type(notice['notice_number'])
+
+                if detail_type:
+                    notice['notice_type']    = detail_type
+                    notice['is_temporary']   = (detail_type == 'temporary')
+                    notice['is_preliminary'] = (detail_type == 'preliminary')
+                    debug_print(f"  Classified {notice['notice_number']} as {detail_type} (detail page)")
+                else:
+                    # Tier 3 — heuristic fallback
+                    type_info = parse_notice_type(notice.get('notice_number', ''))
+                    notice.update(type_info)
+                    debug_print(f"  Classified {notice['notice_number']} as {type_info['notice_type']} (heuristic fallback)")
+
+                _set_progress(current=step + 1, tier2_queue=len(needs_detail) - step - 1)
+
+                # Throttle: delay before the next detail fetch (skip after the last one)
+                if step < len(needs_detail) - 1:
+                    time.sleep(TIER2_DELAY)
+
+        # ------------------------------------------------------------------
+        # Post-classification: extract expiry dates for temporary notices
+        # ------------------------------------------------------------------
+        for notice in notices:
+            if notice.get('is_temporary'):
+                expiry = extract_expiry_date(
+                    notice.get('title', ''),
+                    notice.get('content', '')
+                )
+                notice['expiry_date'] = expiry
+
+        _set_progress(active=False, phase='Klart', current=0, total=0, tier2_queue=0)
         return notices
         
     except Exception as e:
+        _set_progress(active=False, phase='Fel', current=0, total=0, tier2_queue=0)
         debug_print(f"Error scraping UFS: {e}")
         return {'error': str(e)}
 
