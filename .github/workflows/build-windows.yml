@@ -2,6 +2,7 @@ name: Build Windows Executable
 
 on:
   push:
+    branches: [ main, master ]
     tags:
       - 'v*'
   pull_request:
@@ -41,11 +42,9 @@ jobs:
       run: |
         mkdir UFS-Tracker-Windows
         
-        rem Copy the Desktop app bundle
-        xcopy /E /I dist\UFS-Tracker-Desktop UFS-Tracker-Windows\Desktop
-        
-        rem Copy the Console app bundle
-        xcopy /E /I dist\UFS-Tracker UFS-Tracker-Windows\Console
+        rem Both are now single-file exes (onefile mode)
+        copy dist\UFS-Tracker-Desktop.exe UFS-Tracker-Windows\
+        copy dist\UFS-Tracker.exe UFS-Tracker-Windows\
         
         rem Copy docs
         copy README.md UFS-Tracker-Windows\
@@ -54,18 +53,20 @@ jobs:
         rem start.bat runs the Desktop (pywebview) app
         echo @echo off > UFS-Tracker-Windows\start.bat
         echo echo Starting UFS Maritime Notices Tracker... >> UFS-Tracker-Windows\start.bat
-        echo Desktop\UFS-Tracker-Desktop.exe >> UFS-Tracker-Windows\start.bat
+        echo UFS-Tracker-Desktop.exe >> UFS-Tracker-Windows\start.bat
         
         rem start-console.bat runs the browser version
         echo @echo off > UFS-Tracker-Windows\start-console.bat
         echo echo Starting UFS Maritime Notices Tracker (Browser mode)... >> UFS-Tracker-Windows\start-console.bat
         echo start http://127.0.0.1:5000 >> UFS-Tracker-Windows\start-console.bat
-        echo Console\UFS-Tracker.exe >> UFS-Tracker-Windows\start-console.bat
+        echo UFS-Tracker.exe >> UFS-Tracker-Windows\start-console.bat
         
         echo UFS Maritime Notices Tracker - Windows Package > UFS-Tracker-Windows\README-PACKAGE.txt
         echo. >> UFS-Tracker-Windows\README-PACKAGE.txt
         echo Desktop App (Recommended): Double-click start.bat >> UFS-Tracker-Windows\README-PACKAGE.txt
         echo Browser Mode: Double-click start-console.bat >> UFS-Tracker-Windows\README-PACKAGE.txt
+        echo. >> UFS-Tracker-Windows\README-PACKAGE.txt
+        echo Database is stored in: %APPDATA%\UFS-Tracker\ >> UFS-Tracker-Windows\README-PACKAGE.txt
       shell: cmd
     
     - name: Upload artifact

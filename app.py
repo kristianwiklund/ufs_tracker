@@ -12,7 +12,6 @@ from services.scraper import scrape_ufs_notices, get_chart_mappings, set_debug_m
 from utils.chart_parser import parse_notice_type
 
 app = Flask(__name__)
-app.config['DATABASE'] = 'ufs_notices.db'
 
 # Make datetime.now() available inside all Jinja2 templates
 app.jinja_env.globals['now'] = datetime.now

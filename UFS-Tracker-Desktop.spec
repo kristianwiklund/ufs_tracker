@@ -62,27 +62,16 @@ exe = EXE(
     [],
     name='UFS-Tracker-Desktop',
     debug=False,
-    bootloader_ignore_signals=False,
+    bootloader_ignore_signals=True,
     strip=False,
     upx=True,
     upx_exclude=[],
     runtime_tmpdir=None,
-    console=False,  # No console window
+    console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=None,  # Add icon=app.ico if you have an icon file
-)
-
-coll = COLLECT(
-    exe,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
-    strip=False,
-    upx=True,
-    upx_exclude=[],
-    name='UFS-Tracker-Desktop',
+    icon=None,
 )
