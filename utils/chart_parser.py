@@ -131,34 +131,83 @@ def parse_page_numbers(chart_ref):
 
 def extract_expiry_date(title, content=None):
     """
-    Try to extract expiry date from notice title or content
-    
-    Common patterns:
-    - "Gäller till 2024-12-31"
-    - "Valid until 31 Dec 2024"
-    - "Temporary until further notice"
-    
-    Args:
-        title: Notice title
-        content: Notice content (optional)
-    
+    Extract an expiry date from notice title or content.
+
+    Only dates that are preceded by an expiry-indicating keyword are matched.
+    This prevents publication dates or other incidental dates in the body from
+    being mistaken for an expiry.
+
+    Supported keyword phrases (case-insensitive):
+        Swedish:  "gäller till", "giltig till", "gäller från … till"
+        English:  "valid until", "valid from … until", "expires"
+        Generic:  bare "till" immediately before a date (Swedish notices)
+
+    Supported date formats (after the keyword):
+        YYYY-MM-DD          →  returned as-is
+        DD/MM YYYY          →  converted to YYYY-MM-DD
+        DD Mon YYYY         →  converted to YYYY-MM-DD  (Mon = Jan…Dec or
+                                Jan…Dec in Swedish: jan, feb, mar, apr,
+                                maj, jun, jul, aug, sep, okt, nov, dec)
+
     Returns:
-        ISO date string or None
+        ISO date string (YYYY-MM-DD) or None
     """
     text = f"{title} {content or ''}"
-    
-    # Pattern 1: ISO date (YYYY-MM-DD)
-    iso_match = re.search(r'(\d{4}-\d{2}-\d{2})', text)
-    if iso_match:
-        return iso_match.group(1)
-    
-    # Pattern 2: Swedish format (DD/MM YYYY)
-    swedish_match = re.search(r'(\d{1,2})/(\d{1,2})\s+(\d{4})', text)
-    if swedish_match:
-        day, month, year = swedish_match.groups()
+
+    # Swedish month abbreviations → zero-padded month number
+    SWEDISH_MONTHS = {
+        'jan': '01', 'feb': '02', 'mar': '03', 'apr': '04',
+        'maj': '05', 'jun': '06', 'jul': '07', 'aug': '08',
+        'sep': '09', 'okt': '10', 'nov': '11', 'dec': '12',
+    }
+    # English month abbreviations (same keys work for English too, but add
+    # the ones that differ)
+    ENGLISH_MONTHS = {
+        'jan': '01', 'feb': '02', 'mar': '03', 'apr': '04',
+        'may': '05', 'jun': '06', 'jul': '07', 'aug': '08',
+        'sep': '09', 'oct': '10', 'nov': '11', 'dec': '12',
+    }
+    ALL_MONTHS = {**SWEDISH_MONTHS, **ENGLISH_MONTHS}
+
+    # Keyword prefix that must appear before the date.
+    # The pattern uses a non-capturing group so the date capture groups
+    # are numbered cleanly.  \S+ in the "from … till" variants allows an
+    # arbitrary start-date between the two keywords.
+    KEYWORD = (
+        r'(?:'
+        r'gäller\s+till'
+        r'|giltig\s+till'
+        r'|gäller\s+från\s+\S+\s+till'
+        r'|valid\s+until'
+        r'|valid\s+from\s+\S+\s+until'
+        r'|expires'
+        r'|till'          # bare "till" — common in short Swedish phrases
+        r')\s+'
+    )
+
+    # --- Pattern 1: keyword + YYYY-MM-DD ---
+    m = re.search(KEYWORD + r'(\d{4}-\d{2}-\d{2})', text, re.IGNORECASE)
+    if m:
+        return m.group(1)
+
+    # --- Pattern 2: keyword + DD/MM YYYY ---
+    m = re.search(KEYWORD + r'(\d{1,2})/(\d{1,2})\s+(\d{4})', text, re.IGNORECASE)
+    if m:
+        day, month, year = m.group(1), m.group(2), m.group(3)
         return f"{year}-{month.zfill(2)}-{day.zfill(2)}"
-    
-    # Could add more patterns...
+
+    # --- Pattern 3: keyword + DD Mon YYYY  (e.g. "31 Dec 2024") ---
+    mon_pattern = '|'.join(ALL_MONTHS.keys())
+    m = re.search(
+        KEYWORD + r'(\d{1,2})\s+(' + mon_pattern + r')\s+(\d{4})',
+        text, re.IGNORECASE
+    )
+    if m:
+        day   = m.group(1).zfill(2)
+        month = ALL_MONTHS[m.group(2).lower()]
+        year  = m.group(3)
+        return f"{year}-{month}-{day}"
+
     return None
 
 def get_chart_display_name(chart_identifier, chart_type=None):

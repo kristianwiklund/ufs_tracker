@@ -270,7 +270,11 @@ def scrape_ufs_notices(sjokort_nummer=None, batsportkort=None, max_rows=500):
 
             for step, notice_idx in enumerate(needs_detail):
                 notice = notices[notice_idx]
-                detail_type = fetch_notice_class_type(notice['notice_number'])
+                detail_type, detail_content = fetch_notice_detail(notice['notice_number'])
+
+                # Store whatever content was extracted (may be '' on failure)
+                if detail_content:
+                    notice['content'] = detail_content
 
                 if detail_type:
                     notice['notice_type']    = detail_type
@@ -429,50 +433,90 @@ def extract_notice_suffix(row):
     return None
 
 
-def fetch_notice_class_type(notice_number):
+def fetch_notice_detail(notice_number):
     """
-    Fetch the detail page for a single notice and parse the authoritative
-    Class/type field.
+    Fetch the detail page for a single notice and extract two things:
+      1. The authoritative Class/type (same logic as the old fetch_notice_class_type)
+      2. The notice body text (content)
 
-    Returns 'temporary', 'preliminary', or 'permanent', or None on failure.
+    Returns a (notice_type, content) tuple.
+      notice_type: 'temporary', 'preliminary', 'permanent', or None on failure
+      content:     extracted body text, or '' if not found
     """
     url = f"https://ufs.sjofartsverket.se/en/Current/NoticeDetails?notice={notice_number}&from=search"
     try:
         response = requests.get(url, timeout=10)
         if response.status_code != 200:
             debug_print(f"  Detail page for {notice_number} returned {response.status_code}")
-            return None
+            return None, ''
 
         soup = BeautifulSoup(response.text, 'html.parser')
 
-        # The field is rendered as a <h6> containing bold text like:
-        #   <h6><strong>Class/type:</strong> Temporary/Amendment</h6>
-        # or in Swedish:
-        #   <h6><strong>Typ av notis:</strong> Temporär/Underrättelse</h6>
+        # --- 1. Classify type from <h6> metadata field ---
+        notice_type = None
+        last_meta_h6 = None          # track position for content extraction below
+
         for h6 in soup.find_all('h6'):
             text = h6.get_text(strip=True)
-            # English
-            if text.lower().startswith('class/type:'):
+            lower = text.lower()
+
+            # English label
+            if lower.startswith('class/type:'):
                 value = text.split(':', 1)[1].strip().lower()
                 if value.startswith('temporary'):
-                    return 'temporary'
+                    notice_type = 'temporary'
                 elif value.startswith('preliminary'):
-                    return 'preliminary'
+                    notice_type = 'preliminary'
                 else:
-                    return 'permanent'
-            # Swedish
-            if text.lower().startswith('typ av notis:'):
+                    notice_type = 'permanent'
+                last_meta_h6 = h6
+                break   # found it — no need to keep scanning
+
+            # Swedish label
+            if lower.startswith('typ av notis:'):
                 value = text.split(':', 1)[1].strip().lower()
                 if value.startswith('temporär'):
-                    return 'temporary'
+                    notice_type = 'temporary'
                 elif value.startswith('preliminär'):
-                    return 'preliminary'
+                    notice_type = 'preliminary'
                 else:
-                    return 'permanent'
+                    notice_type = 'permanent'
+                last_meta_h6 = h6
+                break
 
-        debug_print(f"  Could not find Class/type field for notice {notice_number}")
-        return None
+        if notice_type is None:
+            debug_print(f"  Could not find Class/type field for notice {notice_number}")
+
+        # --- 2. Extract body content ---
+        content = ''
+
+        # Strategy A: look for a dedicated content container
+        content_div = (
+            soup.find('div', class_='notice-content')
+            or soup.find('div', class_='noticeContent')
+            or soup.find('div', id='noticeContent')
+        )
+        if content_div:
+            content = content_div.get_text(separator='\n', strip=True)
+            debug_print(f"  Extracted content via container ({len(content)} chars)")
+        elif last_meta_h6:
+            # Strategy B: gather text from siblings that follow the last
+            # metadata <h6>.  These are typically <p>, <ul>, <div> elements
+            # that make up the notice body.
+            parts = []
+            for sibling in last_meta_h6.find_next_siblings():
+                # Stop if we hit another metadata-style header or a nav element
+                if sibling.name in ('h1', 'h2', 'h3', 'h4', 'nav', 'footer'):
+                    break
+                # Skip empty / whitespace-only nodes
+                text = sibling.get_text(separator='\n', strip=True)
+                if text:
+                    parts.append(text)
+            content = '\n'.join(parts)
+            debug_print(f"  Extracted content via siblings ({len(content)} chars)")
+
+        return notice_type, content
 
     except Exception as e:
         debug_print(f"  Error fetching detail page for {notice_number}: {e}")
-        return None
+        return None, ''
