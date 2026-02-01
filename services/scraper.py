@@ -197,18 +197,41 @@ def scrape_ufs_notices(sjokort_nummer=None, batsportkort=None, max_rows=500):
         for idx, row in enumerate(rows):
             notice = parse_notice_row(row, idx)
             if notice:
-                # Add notice type classification
-                type_info = parse_notice_type(notice.get('notice_number', ''))
-                notice.update(type_info)
-                
-                # Try to extract expiry date for temporary notices
-                if type_info['is_temporary']:
+                # --- classify the notice type ---
+                # Priority 1: (T)/(P) suffix visible in the table cell
+                suffix = notice.pop('_suffix', None)
+                if suffix == 'T':
+                    notice['notice_type'] = 'temporary'
+                    notice['is_temporary'] = True
+                    notice['is_preliminary'] = False
+                    debug_print(f"  Classified {notice['notice_number']} as temporary (suffix)")
+                elif suffix == 'P':
+                    notice['notice_type'] = 'preliminary'
+                    notice['is_temporary'] = False
+                    notice['is_preliminary'] = True
+                    debug_print(f"  Classified {notice['notice_number']} as preliminary (suffix)")
+                else:
+                    # Priority 2: fetch the detail page and read Class/type
+                    detail_type = fetch_notice_class_type(notice['notice_number'])
+                    if detail_type:
+                        notice['notice_type'] = detail_type
+                        notice['is_temporary'] = (detail_type == 'temporary')
+                        notice['is_preliminary'] = (detail_type == 'preliminary')
+                        debug_print(f"  Classified {notice['notice_number']} as {detail_type} (detail page)")
+                    else:
+                        # Priority 3: fall back to the old number-suffix heuristic
+                        type_info = parse_notice_type(notice.get('notice_number', ''))
+                        notice.update(type_info)
+                        debug_print(f"  Classified {notice['notice_number']} as {type_info['notice_type']} (heuristic fallback)")
+
+                # Extract expiry date for temporary notices
+                if notice.get('is_temporary'):
                     expiry = extract_expiry_date(
                         notice.get('title', ''),
                         notice.get('content', '')
                     )
                     notice['expiry_date'] = expiry
-                
+
                 notices.append(notice)
         
         return notices
@@ -263,6 +286,9 @@ def parse_notice_row(row, idx):
     
     # Extract notice number from link
     notice_number = extract_notice_number(row)
+
+    # Extract (T)/(P) suffix from visible cell text (if present)
+    suffix = extract_notice_suffix(row)
     
     # Parse cells (format: affected_charts, date, title, empty)
     affected_charts = cells[0].get_text(strip=True) if len(cells) > 0 else ''
@@ -282,14 +308,20 @@ def parse_notice_row(row, idx):
         'content': '',  # Would need to fetch detail page
         'area': '',
         'sjokort_nummer': '',
-        'batsportkort': ''
+        'batsportkort': '',
+        '_suffix': suffix,  # internal; used for classification, not stored to DB
     }
     
-    debug_print(f"  Notice: {notice_number} - {title[:50]}...")
+    debug_print(f"  Notice: {notice_number} suffix={suffix} - {title[:50]}...")
     return notice
 
 def extract_notice_number(row):
-    """Extract notice number from row links or cells"""
+    """
+    Extract notice number from row links or cells.
+
+    Returns the bare numeric ID.  The (T)/(P) suffix, if present in the
+    visible text, is stored separately — see extract_notice_suffix().
+    """
     # Try to find in links
     links = row.find_all('a')
     for link in links:
@@ -297,15 +329,82 @@ def extract_notice_number(row):
         match = re.search(r'notice=(\d+)', href)
         if match:
             return match.group(1)
-    
+
     # Try to find in cell text
     cells = row.find_all('td')
     for cell in cells:
         text = cell.get_text(strip=True)
-        match = re.search(r'\b(\d{4,6}[PT]?)\b', text)
+        match = re.search(r'\b(\d{4,6})[PT]?\b', text)
         if match:
             number = match.group(1)
-            if 10000 <= int(re.sub(r'[PT]', '', number)) <= 25000:
+            if 10000 <= int(number) <= 25000:
                 return number
-    
+
     return ''
+
+
+def extract_notice_suffix(row):
+    """
+    Look for a (T) or (P) suffix next to the notice number in the visible
+    cell text.  The href only contains the bare numeric ID, but the rendered
+    text on the P&T page shows e.g. "19818(T)".
+
+    Returns 'T', 'P', or None.
+    """
+    cells = row.find_all('td')
+    for cell in cells:
+        text = cell.get_text(strip=True)
+        # Match bare number followed immediately by (T) or (P)
+        match = re.search(r'\d{4,6}\s*\(([TP])\)', text)
+        if match:
+            return match.group(1)
+    return None
+
+
+def fetch_notice_class_type(notice_number):
+    """
+    Fetch the detail page for a single notice and parse the authoritative
+    Class/type field.
+
+    Returns 'temporary', 'preliminary', or 'permanent', or None on failure.
+    """
+    url = f"https://ufs.sjofartsverket.se/en/Current/NoticeDetails?notice={notice_number}&from=search"
+    try:
+        response = requests.get(url, timeout=10)
+        if response.status_code != 200:
+            debug_print(f"  Detail page for {notice_number} returned {response.status_code}")
+            return None
+
+        soup = BeautifulSoup(response.text, 'html.parser')
+
+        # The field is rendered as a <h6> containing bold text like:
+        #   <h6><strong>Class/type:</strong> Temporary/Amendment</h6>
+        # or in Swedish:
+        #   <h6><strong>Typ av notis:</strong> Temporär/Underrättelse</h6>
+        for h6 in soup.find_all('h6'):
+            text = h6.get_text(strip=True)
+            # English
+            if text.lower().startswith('class/type:'):
+                value = text.split(':', 1)[1].strip().lower()
+                if value.startswith('temporary'):
+                    return 'temporary'
+                elif value.startswith('preliminary'):
+                    return 'preliminary'
+                else:
+                    return 'permanent'
+            # Swedish
+            if text.lower().startswith('typ av notis:'):
+                value = text.split(':', 1)[1].strip().lower()
+                if value.startswith('temporär'):
+                    return 'temporary'
+                elif value.startswith('preliminär'):
+                    return 'preliminary'
+                else:
+                    return 'permanent'
+
+        debug_print(f"  Could not find Class/type field for notice {notice_number}")
+        return None
+
+    except Exception as e:
+        debug_print(f"  Error fetching detail page for {notice_number}: {e}")
+        return None
