@@ -3,9 +3,57 @@ Database module for UFS Tracker
 Handles database connection, initialization, and schema management
 """
 import sqlite3
+import os
+import sys
+import shutil
 from datetime import datetime
 
-DATABASE_PATH = 'ufs_notices.db'
+
+def _get_app_data_dir():
+    """
+    Return the persistent data directory for this app.
+
+    Windows : %APPDATA%\\UFS-Tracker
+    Linux   : ~/.local/share/UFS-Tracker
+    macOS   : ~/Library/Application Support/UFS-Tracker
+    """
+    if sys.platform == 'win32':
+        base = os.environ.get('APPDATA', os.path.expanduser('~'))
+    elif sys.platform == 'darwin':
+        base = os.path.join(os.path.expanduser('~'), 'Library', 'Application Support')
+    else:
+        # Linux / other Unix — XDG_DATA_HOME defaults to ~/.local/share
+        base = os.environ.get('XDG_DATA_HOME', os.path.join(os.path.expanduser('~'), '.local', 'share'))
+
+    path = os.path.join(base, 'UFS-Tracker')
+    os.makedirs(path, exist_ok=True)
+    return path
+
+
+def _migrate_legacy_db(target_path):
+    """
+    If a ufs_notices.db exists next to the executable (left over from a
+    previous one-dir build) and the target doesn't exist yet, move it
+    so the user doesn't lose their data silently.
+    """
+    if os.path.exists(target_path):
+        return  # nothing to do, target already exists
+
+    # getattr guard: sys._MEIPASS only exists inside a PyInstaller bundle
+    if getattr(sys, 'frozen', False):
+        exe_dir = os.path.dirname(sys.executable)
+    else:
+        exe_dir = os.path.dirname(os.path.abspath(__file__))
+
+    legacy = os.path.join(exe_dir, 'ufs_notices.db')
+    if os.path.exists(legacy):
+        shutil.move(legacy, target_path)
+        print(f"Migrated database from {legacy} to {target_path}")
+
+
+# Resolve once at import time so every caller gets the same path
+DATABASE_PATH = os.path.join(_get_app_data_dir(), 'ufs_notices.db')
+_migrate_legacy_db(DATABASE_PATH)
 
 def get_db():
     """Get database connection"""
